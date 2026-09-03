@@ -137,6 +137,20 @@ export function HostConsole() {
     return () => clearTimeout(t);
   }, [room?.id, room?.last_verdict, room?.last_verdict_at]);
 
+  // A skip's own RPC advances the queue to the next song in the same update
+  // that sets last_verdict, so `room.now_playing_id` already points at the
+  // new song on this very render — but the room-context provider only swaps
+  // `votes` over to match it in an effect, which hasn't run yet this render.
+  // Snapshotting here, during render, catches the tally the instant it
+  // changes, while `votes` still belongs to the song that just got voted on.
+  const verdictTallyRef = useRef<{ nein: number; ahoy: number; total: number } | null>(null);
+  const lastVerdictAtRef = useRef<string | null>(null);
+  const { nein: liveNein, ahoy: liveAhoy } = voteCounts(votes);
+  if (room?.last_verdict_at && room.last_verdict_at !== lastVerdictAtRef.current) {
+    lastVerdictAtRef.current = room.last_verdict_at;
+    verdictTallyRef.current = { nein: liveNein, ahoy: liveAhoy, total: roomSize(members) };
+  }
+
   if (authError) return <Centered>{authError}</Centered>;
   if (loading) return <Centered>Loading room…</Centered>;
   if (notFound || !room) {
@@ -553,8 +567,8 @@ export function HostConsole() {
           size="desktop"
           subline={
             room.last_verdict === "ahoy"
-              ? `${ahoy} of ${total} said keep it. Locked in for the rest of the song.`
-              : `${nein} of ${total} said no. Skipping ahead.`
+              ? `${verdictTallyRef.current?.ahoy ?? ahoy} of ${verdictTallyRef.current?.total ?? total} said keep it. Locked in for the rest of the song.`
+              : `${verdictTallyRef.current?.nein ?? nein} of ${verdictTallyRef.current?.total ?? total} said no. Skipping ahead.`
           }
           next={
             room.last_verdict === "nein" && nowPlaying
