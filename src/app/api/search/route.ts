@@ -17,6 +17,18 @@ const GUIDE_QUERIES: Record<string, string> = {
   risky: "guilty pleasure pop hits",
 };
 
+// Everyone in the room is stuck with whatever gets queued — an hour-long
+// "ultimate compilation" or a full album upload has to be votable out one
+// song at a time. 10 minutes clears real songs (Stairway to Heaven is 8:02,
+// American Pie is 8:33) while blocking compilations and DJ mixes. Also
+// enforced in add_to_queue() in Postgres, since that RPC can be called
+// directly and must not trust the client's search results alone.
+export const MAX_SONG_DURATION_S = 600;
+
+function isReasonableLength(durationS: number): boolean {
+  return durationS > 0 && durationS <= MAX_SONG_DURATION_S;
+}
+
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -38,7 +50,9 @@ async function youtubeSearch(query: string, apiKey: string): Promise<Track[]> {
   searchUrl.searchParams.set("type", "video");
   searchUrl.searchParams.set("videoCategoryId", "10");
   searchUrl.searchParams.set("videoEmbeddable", "true");
-  searchUrl.searchParams.set("maxResults", "12");
+  // fetch extra: some results get filtered out for length below, and we'd
+  // rather still show a full page than a search that mysteriously thins out
+  searchUrl.searchParams.set("maxResults", "20");
   searchUrl.searchParams.set("key", apiKey);
 
   const searchRes = await fetch(searchUrl);
@@ -62,13 +76,14 @@ async function youtubeSearch(query: string, apiKey: string): Promise<Track[]> {
     snippet: { title: string; channelTitle: string; thumbnails?: { medium?: { url: string } } };
     contentDetails: { duration: string };
   };
-  return (videosJson.items ?? []).map((v: VideoItem) => ({
+  const tracks: Track[] = (videosJson.items ?? []).map((v: VideoItem) => ({
     videoId: v.id,
     title: v.snippet.title,
     artist: v.snippet.channelTitle,
     durationS: parseIsoDuration(v.contentDetails.duration),
     thumbUrl: v.snippet.thumbnails?.medium?.url ?? `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
   }));
+  return tracks.filter((t) => isReasonableLength(t.durationS));
 }
 
 export async function GET(req: NextRequest) {
@@ -77,11 +92,11 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   if (!q && !guide) {
-    return NextResponse.json({ results: demoDefaultResults(), source: "demo" });
+    return NextResponse.json({ results: demoDefaultResults().filter((t) => isReasonableLength(t.durationS)), source: "demo" });
   }
 
   if (!apiKey) {
-    const results = guide ? demoGuide(guide) : demoSearch(q);
+    const results = (guide ? demoGuide(guide) : demoSearch(q)).filter((t) => isReasonableLength(t.durationS));
     return NextResponse.json({ results, source: "demo" });
   }
 
@@ -108,7 +123,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results, source: "youtube" });
   } catch (err) {
     console.error(err);
-    const results = guide ? demoGuide(guide) : demoSearch(q);
+    const results = (guide ? demoGuide(guide) : demoSearch(q)).filter((t) => isReasonableLength(t.durationS));
     return NextResponse.json({ results, source: "demo-fallback" });
   }
 }

@@ -14,6 +14,13 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
   const [guide, setGuide] = useState<string | null>(null);
   const [results, setResults] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!addError) return;
+    const t = setTimeout(() => setAddError(null), 4000);
+    return () => clearTimeout(t);
+  }, [addError]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -42,11 +49,17 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
 
   async function add(track: Track) {
     if (!room) return;
+    setAddError(null);
     try {
       await addToQueue(room.id, track);
       onAdded(track);
     } catch (err) {
-      console.error(err);
+      const message = err instanceof Error ? err.message : "";
+      setAddError(
+        message.toLowerCase().includes("already queued")
+          ? "That song's already in the queue."
+          : message || "Couldn't add that song. Try again.",
+      );
     }
   }
 
@@ -138,6 +151,11 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
       </div>
 
       <div className="pane-scroll" style={{ padding: "0 16px 40px" }}>
+        {addError && (
+          <div role="alert" style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", padding: "2px 0 10px" }}>
+            {addError}
+          </div>
+        )}
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--brown)", padding: "2px 0 10px" }}>
           {loading ? "searching…" : metaLabel}
         </div>
