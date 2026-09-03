@@ -7,7 +7,7 @@ import { mmss, thumb } from "@/lib/format";
 import { getSavedPlaylist, saveTrackToPlaylist } from "@/lib/saved-playlist";
 import type { Track } from "@/lib/catalog";
 
-const GUIDES = ["party starters", "80s", "sing along", "risky"];
+const GUIDES = ["party starters", "80s", "sing along", "risky", "nepali", "nepali classics"];
 
 export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
   const { room, queue, nowPlaying } = useRoomContext();

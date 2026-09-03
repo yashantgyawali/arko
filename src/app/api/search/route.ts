@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import {
-  demoDefaultResults,
-  demoGuide,
-  demoSearch,
-  type Track,
-} from "@/lib/catalog";
+import { demoDefaultResults, demoSearch, guideTracks, type Track } from "@/lib/catalog";
 
 export const runtime = "nodejs";
-
-const GUIDE_QUERIES: Record<string, string> = {
-  "party starters": "party hits playlist",
-  "80s": "80s hits",
-  "sing along": "sing along classics",
-  risky: "guilty pleasure pop hits",
-};
 
 // Everyone in the room is stuck with whatever gets queued — an hour-long
 // "ultimate compilation" or a full album upload has to be votable out one
@@ -63,6 +51,16 @@ async function youtubeSearch(query: string, apiKey: string): Promise<Track[]> {
     .filter(Boolean);
   if (ids.length === 0) return [];
 
+  const tracks = await lookupVideos(ids, apiKey);
+  return tracks.filter((t) => isReasonableLength(t.durationS));
+}
+
+/** videos.list — a separate, far less constrained quota bucket than
+ * search.list (1 unit vs. 100). Used both for real search results (after
+ * search.list finds candidate ids) and, in principle, could re-verify guide
+ * tracks — though those are pre-verified once and hardcoded, so no call is
+ * needed for them at all. */
+async function lookupVideos(ids: string[], apiKey: string): Promise<Track[]> {
   const videosUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
   videosUrl.searchParams.set("part", "snippet,contentDetails");
   videosUrl.searchParams.set("id", ids.join(","));
@@ -76,14 +74,13 @@ async function youtubeSearch(query: string, apiKey: string): Promise<Track[]> {
     snippet: { title: string; channelTitle: string; thumbnails?: { medium?: { url: string } } };
     contentDetails: { duration: string };
   };
-  const tracks: Track[] = (videosJson.items ?? []).map((v: VideoItem) => ({
+  return (videosJson.items ?? []).map((v: VideoItem) => ({
     videoId: v.id,
     title: v.snippet.title,
     artist: v.snippet.channelTitle,
     durationS: parseIsoDuration(v.contentDetails.duration),
     thumbUrl: v.snippet.thumbnails?.medium?.url ?? `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
   }));
-  return tracks.filter((t) => isReasonableLength(t.durationS));
 }
 
 export async function GET(req: NextRequest) {
@@ -95,13 +92,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results: demoDefaultResults().filter((t) => isReasonableLength(t.durationS)), source: "demo" });
   }
 
-  if (!apiKey) {
-    const results = (guide ? demoGuide(guide) : demoSearch(q)).filter((t) => isReasonableLength(t.durationS));
-    return NextResponse.json({ results, source: "demo" });
+  // Guide pills are a fixed, curated list, not a free-text query — see
+  // GUIDE_CATALOG in src/lib/catalog.ts for why this never touches YouTube's
+  // API at all (id, title, artist, and duration are pre-verified and
+  // hardcoded). This branch runs identically with or without an API key,
+  // and regardless of whether the search quota is exhausted for the day.
+  if (guide) {
+    return NextResponse.json({ results: guideTracks(guide), source: "curated" });
   }
 
-  const effectiveQuery = guide ? GUIDE_QUERIES[guide] ?? guide : q;
-  const cacheKey = effectiveQuery.toLowerCase();
+  if (!apiKey) {
+    return NextResponse.json({ results: demoSearch(q).filter((t) => isReasonableLength(t.durationS)), source: "demo" });
+  }
+
+  const cacheKey = q.toLowerCase();
   const db = serviceClient();
 
   if (db) {
@@ -116,14 +120,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const results = await youtubeSearch(effectiveQuery, apiKey);
+    const results = await youtubeSearch(q, apiKey);
     if (db && results.length > 0) {
       await db.from("search_cache").upsert({ query: cacheKey, results });
     }
     return NextResponse.json({ results, source: "youtube" });
   } catch (err) {
     console.error(err);
-    const results = (guide ? demoGuide(guide) : demoSearch(q)).filter((t) => isReasonableLength(t.durationS));
-    return NextResponse.json({ results, source: "demo-fallback" });
+    return NextResponse.json({ results: demoSearch(q).filter((t) => isReasonableLength(t.durationS)), source: "demo-fallback" });
   }
 }
