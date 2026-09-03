@@ -1,14 +1,15 @@
 "use client";
 
 import { useRoomContext } from "@/lib/room-context";
-import { initial, threshold, type SkipRule } from "@/lib/format";
+import { initial, roomSize, threshold, type SkipRule } from "@/lib/format";
 
 export function Lobby({ onShare }: { onShare: () => void }) {
   const { room, members, myMember } = useRoomContext();
   if (!room) return null;
 
   const rule = room.skip_rule as SkipRule;
-  const th = threshold(rule, members.length);
+  const total = roomSize(members);
+  const th = threshold(rule, total);
   const host = members.find((m) => m.is_host);
 
   return (
@@ -92,8 +93,8 @@ export function Lobby({ onShare }: { onShare: () => void }) {
               {rule === "anyone"
                 ? "One Nein skips the song. Brutal room."
                 : rule === "two_thirds"
-                  ? `${th} of ${members.length} Neins skips the song.`
-                  : `A majority of Neins skips the song. That is ${th} of ${members.length} right now.`}
+                  ? `${th} of ${total} Neins skips the song.`
+                  : `A majority of Neins skips the song. That is ${th} of ${total} right now.`}
             </div>
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>

@@ -3,7 +3,7 @@
 import { useRoomContext } from "@/lib/room-context";
 import { castVote } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
-import { mmss, threshold, thumb, thumbHi, type SkipRule } from "@/lib/format";
+import { mmss, roomSize, threshold, thumb, thumbHi, type SkipRule } from "@/lib/format";
 import { VoteMeter } from "@/components/VoteMeter";
 
 export function NowPlaying() {
@@ -26,7 +26,7 @@ export function NowPlaying() {
 
   const host = members.find((m) => m.is_host);
   const { nein, ahoy } = voteCounts(votes);
-  const total = members.length;
+  const total = roomSize(members);
   const rule = room.skip_rule as SkipRule;
   const th = threshold(rule, total);
   const locked = nowPlaying.locked;

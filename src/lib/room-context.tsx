@@ -103,13 +103,43 @@ export function RoomProvider({
   }, [code, ready]);
 
   // realtime: room / members / queue_items
+  const roomId = room?.id ?? null;
   useEffect(() => {
-    if (!room?.id) return;
+    if (!roomId) return;
+    // Re-bind to a fresh const: TS does not carry the guard's narrowing into
+    // nested closures below, so `roomId` itself still reads as `string | null`
+    // inside resync() and the channel filters without this.
+    const id = roomId;
+    let cancelled = false;
+
+    // Postgres changes realtime streams live events only — anything that
+    // happens while the socket is disconnected is gone, never backfilled.
+    // Mobile browsers routinely kill the websocket in the background (screen
+    // lock, app switch), so without this a guest's phone freezes on whatever
+    // was playing when it last had a connection until they manually reload.
+    // Refetching fresh state every time the channel (re)connects — including
+    // the very first connect — closes that gap.
+    async function resync() {
+      const [{ data: roomRow }, { data: memberRows }, { data: queueRows }] = await Promise.all([
+        supabase.from("rooms").select("*").eq("id", id).maybeSingle(),
+        supabase.from("members").select("*").eq("room_id", id),
+        supabase
+          .from("queue_items")
+          .select("*")
+          .eq("room_id", id)
+          .order("position", { ascending: true }),
+      ]);
+      if (cancelled) return;
+      if (roomRow) setRoom(roomRow);
+      setMembers(memberRows ?? []);
+      setQueue(queueRows ?? []);
+    }
+
     const channel = supabase
-      .channel(`room:${room.id}`)
+      .channel(`room:${id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "rooms", filter: `id=eq.${room.id}` },
+        { event: "*", schema: "public", table: "rooms", filter: `id=eq.${id}` },
         (payload) => {
           if (payload.eventType === "DELETE") return;
           setRoom(payload.new as RoomRow);
@@ -117,7 +147,7 @@ export function RoomProvider({
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "members", filter: `room_id=eq.${room.id}` },
+        { event: "*", schema: "public", table: "members", filter: `room_id=eq.${id}` },
         (payload) => {
           setMembers((prev) => {
             if (payload.eventType === "DELETE") {
@@ -131,7 +161,7 @@ export function RoomProvider({
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "queue_items", filter: `room_id=eq.${room.id}` },
+        { event: "*", schema: "public", table: "queue_items", filter: `room_id=eq.${id}` },
         (payload) => {
           setQueue((prev) => {
             if (payload.eventType === "DELETE") {
@@ -146,12 +176,28 @@ export function RoomProvider({
           });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") resync();
+      });
+
+    // Belt and suspenders: some mobile browsers fire visibility/online events
+    // well before the socket itself notices it dropped. Resync eagerly rather
+    // than wait for the channel to realize it needs to reconnect.
+    const onWake = () => {
+      if (document.visibilityState === "visible") resync();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("online", onWake);
 
     return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("online", onWake);
       supabase.removeChannel(channel);
     };
-  }, [room?.id]);
+  }, [roomId]);
 
   // realtime: votes for whatever is currently playing
   const nowPlayingId = room?.now_playing_id ?? null;
@@ -160,24 +206,23 @@ export function RoomProvider({
       setVotes([]);
       return;
     }
+    const id = nowPlayingId; // see the room/members/queue_items effect above
     let cancelled = false;
-    supabase
-      .from("votes")
-      .select("*")
-      .eq("queue_item_id", nowPlayingId)
-      .then(({ data }) => {
-        if (!cancelled) setVotes(data ?? []);
-      });
+
+    async function resync() {
+      const { data } = await supabase.from("votes").select("*").eq("queue_item_id", id);
+      if (!cancelled) setVotes(data ?? []);
+    }
 
     const channel = supabase
-      .channel(`votes:${nowPlayingId}`)
+      .channel(`votes:${id}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "votes",
-          filter: `queue_item_id=eq.${nowPlayingId}`,
+          filter: `queue_item_id=eq.${id}`,
         },
         (payload) => {
           setVotes((prev) => {
@@ -193,7 +238,9 @@ export function RoomProvider({
           });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") resync();
+      });
 
     return () => {
       cancelled = true;

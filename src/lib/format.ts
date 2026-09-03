@@ -15,6 +15,20 @@ export function initial(name: string): string {
   return (name.trim()[0] || "?").toUpperCase();
 }
 
+/**
+ * The host never votes — only guests do (the console has "Skip now" instead,
+ * an explicit override). Counting the host toward "how many people are in
+ * the room" made the vote threshold harder to hit than it should be and made
+ * "X in the room" over-report by one. This is the single source of truth for
+ * that count — every threshold calculation and every "in the room" display
+ * must use it, and the server-side room_threshold() Postgres function is
+ * kept in sync with the same exclusion so the UI and actual vote resolution
+ * never disagree about who counts.
+ */
+export function roomSize(members: { is_host: boolean }[]): number {
+  return members.filter((m) => !m.is_host).length;
+}
+
 export type SkipRule = "majority" | "two_thirds" | "anyone";
 
 export function threshold(rule: SkipRule, memberCount: number): number {

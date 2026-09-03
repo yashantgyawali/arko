@@ -10,7 +10,7 @@ import {
   updateRoomSettings,
 } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
-import { initial, inviteLink, mmss, relativeTime, ruleHelp, ruleLabel, threshold, thumb, type SkipRule } from "@/lib/format";
+import { initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, threshold, thumb, type SkipRule } from "@/lib/format";
 import { STALLED, useYouTubePlayer } from "@/lib/use-youtube-player";
 import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
@@ -147,7 +147,7 @@ export function HostConsole() {
     );
   }
 
-  const total = members.length;
+  const total = roomSize(members);
   const rule = room.skip_rule as SkipRule;
   const th = threshold(rule, total);
   const { nein, ahoy } = voteCounts(votes);
