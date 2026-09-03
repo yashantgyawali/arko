@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
 import { clearVerdict } from "@/lib/actions";
 import { inviteLink, thumb } from "@/lib/format";
@@ -14,9 +14,18 @@ import { VerdictOverlay } from "@/components/VerdictOverlay";
 import { Toast } from "@/components/Toast";
 
 export function GuestApp() {
-  const { loading, notFound, authError, room, nowPlaying } = useRoomContext();
+  const { loading, notFound, authError, room, nowPlaying, myMember } = useRoomContext();
   const [screen, setScreen] = useState<GuestScreen>("lobby");
   const [toast, setToast] = useState<{ text: string; thumbUrl?: string } | null>(null);
+
+  // Once you've genuinely been a member, myMember going back to null means
+  // the host removed you — not that you haven't loaded yet. Without this
+  // distinction every action (voting, adding a song) would just silently
+  // fail with no explanation, since the server correctly rejects a
+  // non-member and there'd be nothing on screen saying why.
+  const wasMemberRef = useRef(false);
+  if (myMember) wasMemberRef.current = true;
+  const removed = wasMemberRef.current && !myMember && !loading;
 
   useEffect(() => {
     if (!toast) return;
@@ -46,6 +55,14 @@ export function GuestApp() {
       <Centered>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>Room not found</div>
         <div style={{ color: "var(--brown)", fontSize: 14 }}>Double check the code with the host.</div>
+      </Centered>
+    );
+  }
+  if (removed) {
+    return (
+      <Centered>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>You&apos;ve been removed from this room</div>
+        <div style={{ color: "var(--brown)", fontSize: 14 }}>Ask the host if you think that was a mistake.</div>
       </Centered>
     );
   }

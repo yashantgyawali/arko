@@ -68,6 +68,14 @@ export async function removeFromQueue(roomId: string, queueItemId: string) {
   if (error) throw error;
 }
 
+export async function removeMember(roomId: string, memberId: string) {
+  const { error } = await supabase.rpc("remove_member", {
+    p_room_id: roomId,
+    p_member_id: memberId,
+  });
+  if (error) throw error;
+}
+
 export async function hostSkip(roomId: string) {
   const { error } = await supabase.rpc("host_skip", { p_room_id: roomId });
   if (error) throw error;

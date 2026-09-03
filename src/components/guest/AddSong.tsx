@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
 import { addToQueue } from "@/lib/actions";
 import { mmss, thumb } from "@/lib/format";
+import { getSavedPlaylist, saveTrackToPlaylist } from "@/lib/saved-playlist";
 import type { Track } from "@/lib/catalog";
 
 const GUIDES = ["party starters", "80s", "sing along", "risky"];
@@ -15,6 +16,14 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
   const [results, setResults] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  // Songs this browser has queued before, kept locally — lets a returning
+  // host (or guest) skip re-searching their usual picks for a brand new room.
+  const [saved, setSaved] = useState<Track[]>([]);
+  const [showSaved, setShowSaved] = useState(false);
+  useEffect(() => {
+    setSaved(getSavedPlaylist());
+  }, []);
 
   useEffect(() => {
     if (!addError) return;
@@ -52,6 +61,7 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
     setAddError(null);
     try {
       await addToQueue(room.id, track);
+      setSaved(saveTrackToPlaylist(track));
       onAdded(track);
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
@@ -63,11 +73,14 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
     }
   }
 
-  const metaLabel = query.trim()
-    ? `${results.length} results for "${query.trim()}"`
-    : guide
-      ? guide
-      : "popular in this room tonight";
+  const displayResults = showSaved ? saved : results;
+  const metaLabel = showSaved
+    ? "songs you've added before"
+    : query.trim()
+      ? `${results.length} results for "${query.trim()}"`
+      : guide
+        ? guide
+        : "popular in this room tonight";
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "nFade 300ms ease" }}>
@@ -92,6 +105,7 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
             onChange={(e) => {
               setQuery(e.target.value);
               setGuide(null);
+              setShowSaved(false);
             }}
             placeholder="search a song or artist"
             style={{ borderRadius: 999, padding: "14px 52px 14px 16px" }}
@@ -120,6 +134,30 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
           )}
         </div>
         <div style={{ marginTop: 12, display: "flex", gap: 9, overflow: "auto", padding: "2px 0 6px" }}>
+          {saved.length > 0 && (
+            <button
+              onClick={() => {
+                setShowSaved((on) => !on);
+                setQuery("");
+                setGuide(null);
+              }}
+              className="btn"
+              aria-pressed={showSaved}
+              style={{
+                flex: "none",
+                minHeight: 44,
+                borderRadius: 999,
+                padding: "9px 18px",
+                fontSize: 14,
+                fontWeight: 600,
+                border: "1px solid var(--red)",
+                background: showSaved ? "var(--red)" : "var(--paper)",
+                color: showSaved ? "var(--paper)" : "var(--red)",
+              }}
+            >
+              ★ my playlist
+            </button>
+          )}
           {GUIDES.map((g) => {
             const on = guide === g;
             return (
@@ -128,6 +166,7 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
                 onClick={() => {
                   setGuide(on ? null : g);
                   setQuery("");
+                  setShowSaved(false);
                 }}
                 className="btn"
                 aria-pressed={on}
@@ -157,10 +196,10 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
           </div>
         )}
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--brown)", padding: "2px 0 10px" }}>
-          {loading ? "searching…" : metaLabel}
+          {loading && !showSaved ? "searching…" : metaLabel}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {results.map((r, i) => {
+          {displayResults.map((r, i) => {
             const inQueue = queuedIds.has(r.videoId) || nowPlaying?.video_id === r.videoId;
             return (
               <div
@@ -215,9 +254,9 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
               </div>
             );
           })}
-          {!loading && results.length === 0 && (
+          {!loading && displayResults.length === 0 && (
             <div style={{ padding: "24px 4px", color: "var(--brown)", fontSize: 14 }}>
-              No results. Try a different search.
+              {showSaved ? "Nothing saved yet — songs you add will show up here next time." : "No results. Try a different search."}
             </div>
           )}
         </div>

@@ -44,7 +44,7 @@ export type Database = {
       }
       queue_items: {
         Row: {
-          added_by: string
+          added_by: string | null
           artist: string
           created_at: string
           duration_s: number
@@ -58,7 +58,7 @@ export type Database = {
           video_id: string
         }
         Insert: {
-          added_by: string
+          added_by?: string | null
           artist: string
           created_at?: string
           duration_s: number
@@ -172,6 +172,10 @@ export type Database = {
       }
       remove_from_queue: {
         Args: { p_queue_item_id: string; p_room_id: string }
+        Returns: undefined
+      }
+      remove_member: {
+        Args: { p_member_id: string; p_room_id: string }
         Returns: undefined
       }
       update_room_settings: {

@@ -6,6 +6,7 @@ import { Logo } from "@/components/Logo";
 import { CodeCells, CodeInput, normalizeCode } from "@/components/CodeCells";
 import { useAnonAuth } from "@/lib/use-anon-auth";
 import { joinRoom } from "@/lib/actions";
+import { getSavedName, saveName } from "@/lib/saved-name";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -37,6 +38,16 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
   useEffect(() => {
     setHydrated(true);
     (window as unknown as { __arkoHydrated?: boolean }).__arkoHydrated = true;
+  }, []);
+
+  // Read the remembered name after mount, not as the initial state — this
+  // page is server-rendered, and localStorage isn't available there. Setting
+  // it as the very first useState value would make the client's first paint
+  // disagree with the server-rendered HTML (a hydration mismatch); updating
+  // it a moment after mount instead is a perfectly ordinary re-render.
+  useEffect(() => {
+    const saved = getSavedName();
+    if (saved) setName(saved);
   }, []);
 
   // normalize once, here — never inside onChange, which would fight the IME
@@ -85,6 +96,7 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
         return;
       }
       const room = await withTimeout(joinRoom(cleanCode, name.trim()), 12000, "Joining");
+      saveName(name.trim());
       router.push(`/room/${room.code}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? "");

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRoomContext } from "@/lib/room-context";
+import { useRoomContext, type MemberRow, type RoomRow } from "@/lib/room-context";
 import {
   clearVerdict,
   hostSkip,
   markNowPlayingFinished,
   removeFromQueue,
+  removeMember,
   updateRoomSettings,
 } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
@@ -463,6 +464,7 @@ export function HostConsole() {
           </div>
 
           <div id="room" style={{ display: "flex", flexDirection: "column", gap: 22, scrollMarginTop: 16 }}>
+            <RoomMembers room={room} members={members} />
             <div className="card">
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20 }}>Room activity</div>
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -538,6 +540,89 @@ function Equalizer() {
       <span style={{ width: 3, background: "var(--red)", borderRadius: 2, height: 9, animation: "nEq 640ms ease-in-out infinite" }} />
       <span style={{ width: 3, background: "var(--yellow)", borderRadius: 2, height: 15, animation: "nEq 640ms ease-in-out infinite", animationDelay: "150ms" }} />
       <span style={{ width: 3, background: "var(--red)", borderRadius: 2, height: 7, animation: "nEq 640ms ease-in-out infinite", animationDelay: "300ms" }} />
+    </div>
+  );
+}
+
+/**
+ * The anonymous, no-login design means the same person can end up as two
+ * distinct members if they join from more than one device/browser, or a
+ * stray test session lingers — there's no account identity to dedupe
+ * against. This gives the host a manual way to clean that up.
+ */
+function RoomMembers({ room, members }: { room: RoomRow; members: MemberRow[] }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!confirmId) return;
+    const t = setTimeout(() => setConfirmId(null), 3000);
+    return () => clearTimeout(t);
+  }, [confirmId]);
+
+  async function confirmRemove(member: MemberRow) {
+    setBusyId(member.id);
+    setError(null);
+    try {
+      await removeMember(room.id, member.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't remove that person.");
+    } finally {
+      setBusyId(null);
+      setConfirmId(null);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20 }}>Room members</div>
+      {error && (
+        <div role="alert" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: "var(--red)" }}>
+          {error}
+        </div>
+      )}
+      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {members.map((m) => {
+          const confirming = confirmId === m.id;
+          return (
+            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 11 }}>
+              <div className="avatar" style={{ width: 30, height: 30, fontSize: 12 }}>{initial(m.display_name)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.display_name}
+                  {m.is_host && (
+                    <span className="arko-tag" style={{ marginLeft: 8, padding: "1px 8px", fontSize: 11 }}>
+                      host
+                    </span>
+                  )}
+                </div>
+              </div>
+              {!m.is_host &&
+                (confirming ? (
+                  <button
+                    onClick={() => confirmRemove(m)}
+                    disabled={busyId === m.id}
+                    className="btn"
+                    style={{ flex: "none", padding: "6px 12px", fontSize: 12, background: "var(--red)", color: "var(--paper)" }}
+                  >
+                    {busyId === m.id ? "Removing…" : `Remove ${m.display_name}?`}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmId(m.id)}
+                    aria-label={`Remove ${m.display_name}`}
+                    title="Remove from room"
+                    className="icon-remove"
+                    style={{ flex: "none", width: 28, height: 28, fontSize: 14, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
