@@ -12,21 +12,37 @@ const RULES: SkipRule[] = ["majority", "two_thirds", "anyone"];
 
 export default function CreateRoomPage() {
   const router = useRouter();
-  const { ready } = useAnonAuth();
+  const { ready, error: authError, ensure } = useAnonAuth();
   const [name, setName] = useState("Sam's kitchen");
   const [rule, setRule] = useState<SkipRule>("majority");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * Never disabled except while a create is in flight. This was gated on the
+   * anonymous session being ready, so a missing/failed sign-in left it dead
+   * with nothing on screen explaining why. Preconditions are checked here so
+   * there is always a visible reason.
+   */
   async function doCreate() {
-    if (!ready || busy) return;
-    setBusy(true);
+    if (busy) return;
     setError(null);
+    setBusy(true);
     try {
+      const userId = ready ? true : await ensure();
+      if (!userId) {
+        setError(
+          authError ??
+            "Couldn't connect to the server. If this is a fresh deploy, its Supabase environment variables may be missing.",
+        );
+        setBusy(false);
+        return;
+      }
       const room = await createRoom(name.trim() || "the room", rule);
       router.push(`/host/${room.code}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't create a room.");
+      const message = err instanceof Error ? err.message : String(err ?? "");
+      setError(`Couldn't create a room: ${message || "unknown error"}`);
       setBusy(false);
     }
   }
@@ -99,7 +115,7 @@ export default function CreateRoomPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
               <button
                 onClick={doCreate}
-                disabled={!ready || busy}
+                disabled={busy}
                 className="btn btn-primary"
                 style={{ padding: "16px 40px", fontSize: 19 }}
               >
@@ -109,7 +125,14 @@ export default function CreateRoomPage() {
                 music plays from this computer
               </div>
             </div>
-            {error && <div style={{ fontSize: 13, color: "var(--red)", fontWeight: 600 }}>{error}</div>}
+            {(error || authError) && (
+              <div role="alert" style={{ fontSize: 14, color: "var(--red)", fontWeight: 700 }}>
+                {error ?? authError}
+              </div>
+            )}
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brown)", opacity: 0.75 }}>
+              build 6 · {ready ? "signed in" : "no session"}
+            </div>
           </div>
         </div>
 

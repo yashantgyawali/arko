@@ -179,7 +179,7 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
       <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: "var(--brown)", fontWeight: 600, minHeight: 20 }}>
         {hint ?? (!ready ? "Connecting…" : codeFromLink ? "You were invited to this room." : "")}
         <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, opacity: 0.75 }}>
-          build 5 · {hydrated ? "react ready" : "react NOT mounted"} · {ready ? "signed in" : "no session"}
+          build 6 · {hydrated ? "react ready" : "react NOT mounted"} · {ready ? "signed in" : "no session"}
         </div>
       </div>
     </main>

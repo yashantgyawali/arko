@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, Patrick_Hand, Atkinson_Hyperlegible } from "next/font/google";
 import "./globals.css";
+import { HydrationProbe } from "@/components/HydrationProbe";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -104,6 +105,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body>
         <script dangerouslySetInnerHTML={{ __html: ERROR_OVERLAY }} />
+        <HydrationProbe />
         {children}
       </body>
     </html>
