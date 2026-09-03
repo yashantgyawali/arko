@@ -101,12 +101,21 @@ export function HostConsole() {
   useEffect(() => {
     if (nowPlaying && lastLoadedRef.current !== nowPlaying.video_id) {
       lastLoadedRef.current = nowPlaying.video_id;
-      loadVideo(nowPlaying.video_id);
+      // Computed directly from room.started_at rather than the elapsedS
+      // ticker: that ticker lives in a parent provider and can still hold a
+      // stale value (e.g. 0) on the very render this effect fires, since
+      // child effects run before parent effects in React. Without a correct
+      // offset here, a host refreshing mid-song would see the right elapsed
+      // time on screen (that's server-derived, independent of the player)
+      // while the audio silently restarted from 0:00.
+      const startedAtMs = room?.started_at ? new Date(room.started_at).getTime() : Date.now();
+      const offset = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+      loadVideo(nowPlaying.video_id, offset);
     } else if (!nowPlaying && lastLoadedRef.current !== null) {
       lastLoadedRef.current = null;
       stop();
     }
-  }, [nowPlaying, loadVideo, stop]);
+  }, [nowPlaying, loadVideo, stop, room?.started_at]);
 
   // Safety net: if the embedded player never fires ENDED (autoplay blocked,
   // player error, tab was backgrounded), the server-side elapsed clock is

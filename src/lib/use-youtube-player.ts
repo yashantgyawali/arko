@@ -2,8 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 
+type LoadTarget = { videoId: string; startSeconds?: number };
+
 type YTPlayer = {
-  loadVideoById: (videoId: string) => void;
+  loadVideoById: (video: string | LoadTarget) => void;
   playVideo: () => void;
   pauseVideo: () => void;
   stopVideo: () => void;
@@ -79,7 +81,7 @@ function loadYouTubeApi(): Promise<void> {
 export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) => void) {
   const playerRef = useRef<YTPlayer | null>(null);
   const readyRef = useRef(false);
-  const pendingVideoId = useRef<string | null>(null);
+  const pendingVideo = useRef<LoadTarget | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
   const onErrorRef = useRef(onError);
@@ -136,10 +138,10 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
         events: {
           onReady: () => {
             readyRef.current = true;
-            if (pendingVideoId.current) {
-              const videoId = pendingVideoId.current;
-              pendingVideoId.current = null;
-              callWhenReady(() => playerRef.current, (p) => p.loadVideoById(videoId));
+            if (pendingVideo.current) {
+              const target = pendingVideo.current;
+              pendingVideo.current = null;
+              callWhenReady(() => playerRef.current, (p) => p.loadVideoById(target));
             }
           },
           onStateChange: (e) => {
@@ -161,14 +163,23 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * `startSeconds` matters whenever the player is created against a song
+   * already in progress — a page load, or a refresh mid-song — not just a
+   * genuinely new song starting at 0. Without it `loadVideoById` always
+   * starts from 0:00, so a refresh would visibly show the correct elapsed
+   * time (that's derived from the server's `started_at`, independent of the
+   * player) while the audio silently restarted from the beginning.
+   */
   const loadVideo = useCallback(
-    (videoId: string) => {
+    (videoId: string, startSeconds = 0) => {
       setIsPlaying(true);
       armWatchdog();
+      const target: LoadTarget = startSeconds > 0 ? { videoId, startSeconds } : { videoId };
       if (readyRef.current) {
-        callWhenReady(() => playerRef.current, (p) => p.loadVideoById(videoId));
+        callWhenReady(() => playerRef.current, (p) => p.loadVideoById(target));
       } else {
-        pendingVideoId.current = videoId;
+        pendingVideo.current = target;
       }
     },
     [armWatchdog],
@@ -182,7 +193,7 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
   }, [clearWatchdog]);
   const stop = useCallback(() => {
     clearWatchdog();
-    pendingVideoId.current = null;
+    pendingVideo.current = null;
     if (readyRef.current) callWhenReady(() => playerRef.current, (p) => p.stopVideo());
   }, [clearWatchdog]);
 
