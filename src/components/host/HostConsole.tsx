@@ -82,7 +82,7 @@ export function HostConsole() {
     };
   }, [loading, notFound]);
 
-  const { containerRef, loadVideo, play, pause, stop, isPlaying } = useYouTubePlayer(
+  const { containerRef, loadVideo, play, pause, stop, resume, isPlaying, needsTap } = useYouTubePlayer(
     () => {
       if (room && isHost) markNowPlayingFinished(room.id).catch(console.error);
     },
@@ -165,7 +165,9 @@ export function HostConsole() {
   const skipped = queue.filter((q) => q.status === "skipped").length;
   const neinsTonight = members.reduce((a, m) => a + m.neins_cast, 0);
   const recentActivity = [...queue].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 6);
-  const ranked = [...members].sort((a, b) => b.points - a.points);
+  // The host never votes or gets scored — showing up in this leaderboard
+  // would read as the host competing in their own room.
+  const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
 
   // The invite has to carry the code, or the guest still has to be told it.
   const copyInvite = () => {
@@ -338,6 +340,37 @@ export function HostConsole() {
                 <div ref={containerRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
                 {!nowPlaying && (
                   <div style={{ position: "absolute", inset: 0, background: "var(--ink)" }} />
+                )}
+                {nowPlaying && needsTap && (
+                  // Browsers block autoplay that wasn't triggered by a direct
+                  // click — true for every song, since it's started by a
+                  // realtime event, not a click. Losing the song to an
+                  // auto-skip over a browser policy would be worse than
+                  // asking for one tap to unblock it.
+                  <button
+                    onClick={resume}
+                    className="tap"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      background: "rgba(20,16,12,0.82)",
+                      color: "var(--beige)",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ fontSize: 34 }}>▶</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, textAlign: "center", padding: "0 16px" }}>
+                      Tap to start playback
+                    </span>
+                  </button>
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 240, display: "flex", flexDirection: "column" }}>

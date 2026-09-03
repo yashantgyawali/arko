@@ -172,7 +172,7 @@ export function RoomProvider({
             const next = exists
               ? prev.map((q) => (q.id === row.id ? row : q))
               : [...prev, row];
-            return next.sort((a, b) => a.position - b.position);
+            return next.sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
           });
         },
       )
@@ -273,7 +273,7 @@ export function RoomProvider({
     () =>
       queue
         .filter((q) => q.status === "queued")
-        .sort((a, b) => a.position - b.position),
+        .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at)),
     [queue],
   );
 

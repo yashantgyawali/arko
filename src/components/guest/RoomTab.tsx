@@ -6,7 +6,9 @@ import { bestBy, TITLES } from "@/lib/derive";
 
 export function RoomTab({ onShare }: { onShare: () => void }) {
   const { room, members, myMember } = useRoomContext();
-  const ranked = [...members].sort((a, b) => b.points - a.points);
+  // The host never votes or gets scored — showing up in this leaderboard
+  // would read as the host competing in their own room.
+  const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "nFade 300ms ease" }}>
