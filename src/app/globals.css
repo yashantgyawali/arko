@@ -1,26 +1,476 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --red: #f16147;
+  --red-dark: #ad3a26;
+  --yellow: #f3b952;
+  --beige: #faf1e4;
+  --ink: #130d01;
+  --brown: #5a3a1f;
+  --paper: #ffffff;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-yellow: 4px 4px 0 0 var(--yellow);
+  --shadow-yellow-lg: 7px 7px 0 0 var(--yellow);
+  --shadow-ink: 4px 4px 0 0 var(--ink);
+  --shadow-red: 4px 4px 0 0 var(--red);
+
+  --font-body: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-hand: var(--font-patrick), cursive;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Phone-first: dvh tracks the shrinking viewport when the URL bar shows,
+   so pinned controls (vote dock, tab bar) stay reachable. */
+:root {
+  --app-h: 100vh;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+@supports (height: 100dvh) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --app-h: 100dvh;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--beige);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font-family: inherit;
+  color: inherit;
+}
+
+input:focus,
+button:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+@keyframes nPop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes nRise {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes nFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes nEq {
+  0%,
+  100% {
+    height: 5px;
+  }
+  50% {
+    height: 18px;
+  }
+}
+@keyframes nStamp {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.95);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes nSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes nNudge {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -3px);
+  }
+}
+@keyframes nBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.012);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.arko-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  cursor: pointer;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-weight: 800;
+  transition: transform 180ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.btn-primary {
+  background: var(--red);
+  color: var(--paper);
+  box-shadow: var(--shadow-yellow-lg);
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translate(-3px, -3px);
+  box-shadow: 10px 10px 0 0 var(--yellow);
+}
+.btn-primary:active:not(:disabled) {
+  transform: translate(0, 0);
+  box-shadow: 2px 2px 0 0 var(--yellow);
+}
+.btn-secondary {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: none;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--yellow);
+}
+.btn-dark {
+  background: var(--ink);
+  color: var(--beige);
+  box-shadow: var(--shadow-red);
+}
+.btn-dark:hover:not(:disabled) {
+  transform: translate(-3px, -3px);
+}
+
+/* ---------- surfaces ---------- */
+.card {
+  border: 1px solid var(--brown);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  padding: 18px;
+}
+.card-thick {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+/* ---------- form controls ---------- */
+.field {
+  width: 100%;
+  padding: 13px 15px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 16px;
+  color: var(--ink);
+}
+.field::placeholder {
+  color: var(--brown);
+  opacity: 0.7;
+}
+
+/* ---------- avatar ---------- */
+.avatar {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brown);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  background: var(--beige);
+  flex: none;
+}
+
+/* ---------- vote buttons ---------- */
+.vote-btn {
+  flex: 1;
+  height: 62px;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 150ms ease;
+}
+.vote-btn:hover {
+  opacity: 0.86;
+}
+.vote-btn-nein {
+  background: var(--ink);
+  color: var(--beige);
+  border-right: 1px solid var(--ink);
+}
+.vote-btn-ahoy {
+  background: var(--red);
+  color: var(--paper);
+}
+
+/* ---------- misc ---------- */
+.link-btn {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+.hover-row:hover {
+  background: var(--beige);
+}
+.icon-remove {
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brown);
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--brown);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.icon-remove:hover {
+  background: var(--red);
+  color: var(--paper);
+  border-color: var(--red);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  text-align: left;
+  transition: background 150ms ease;
+  width: 100%;
+}
+.nav-item:not(.nav-item-active):hover {
+  background: var(--paper);
+}
+.nav-item-active {
+  background: var(--ink);
+  color: var(--beige);
+}
+
+@media (max-width: 760px) {
+  .host-new-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .console-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .console-sidebar {
+    display: none !important;
+  }
+}
+
+/* =====================================================================
+   LAYOUT SCAFFOLDING — sticky chrome, safe areas, tap targets
+   ===================================================================== */
+
+/* Guest shell: fills the visual viewport so pinned chrome never leaves it. */
+.guest-shell {
+  min-height: var(--app-h);
+  height: var(--app-h);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scroll panes inside the shell shouldn't rubber-band the whole page. */
+.pane-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Bottom tab bar: sticky, thumb-reachable, clear of the home indicator. */
+.tabbar {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--brown);
+  background: var(--beige);
+  padding-bottom: var(--safe-b);
+}
+.tabbar-btn {
+  min-height: 52px;
+  padding: 12px 4px 10px;
+  font-size: 13px;
+  text-align: center;
+  border: 0;
+  border-top: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--brown);
+  font-weight: 600;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.tabbar-btn[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 700;
+  border-top-color: var(--ink);
+  background: var(--paper);
+}
+
+/* Vote dock: the primary action, pinned above the tab bar. */
+.vote-dock {
+  flex: none;
+  padding: 12px 16px 10px;
+  border-top: 1px solid var(--brown);
+  background: var(--beige);
+}
+
+/* Minimum comfortable touch target (iOS HIG / WCAG 2.5.5). */
+.tap {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Host rail: stays put while the console scrolls, scrolls itself if short. */
+.console-shell {
+  min-height: var(--app-h);
+  display: flex;
+  align-items: flex-start;
+}
+.console-sidebar {
+  position: sticky;
+  top: 0;
+  height: var(--app-h);
+  width: 240px;
+  flex: none;
+  border-right: 2px solid var(--ink);
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--beige);
+}
+.console-main {
+  flex: 1;
+  min-width: 0;
+  padding: 24px 30px 44px;
+}
+
+/* Queue rows: fixed columns beat wrapping flex — at mid widths the old
+   flex-wrap collapsed metadata into a ragged pile. */
+.queue-row {
+  display: grid;
+  grid-template-columns: 22px 50px minmax(0, 1fr) 130px 46px 84px 32px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--brown);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+@media (max-width: 1100px) {
+  /* drop the least load-bearing columns first, keep the destructive control */
+  .queue-row {
+    grid-template-columns: 22px 50px minmax(0, 1fr) 46px 32px;
+  }
+  .queue-col-by,
+  .queue-col-state {
+    display: none;
+  }
+}
+@media (max-width: 620px) {
+  .queue-row {
+    grid-template-columns: 22px 44px minmax(0, 1fr) 32px;
+  }
+  .queue-col-dur {
+    display: none;
+  }
+}
+
+/* Small-screen host fallback: the rail hides, so surface code + settings. */
+.host-topbar {
+  display: none;
+}
+@media (max-width: 760px) {
+  .host-topbar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--beige);
+    border-bottom: 2px solid var(--ink);
+  }
+  .console-main {
+    padding: 16px 16px 40px;
+  }
 }

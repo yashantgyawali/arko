@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# arko
 
-## Getting Started
+Everyone votes. The room decides what plays next.
 
-First, run the development server:
+A room-based group music voting app: one host plays music from their laptop,
+everyone else joins on their phone with a 4-character code, searches/queues
+songs, and votes **Nein** (skip) or **Ahoy** (keep) on whatever's currently
+playing. Built with Next.js + Supabase (Postgres, Realtime, anonymous auth) —
+free to run and fully multiplayer.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Setup
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Install deps**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+   ```bash
+   npm install
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **Enable anonymous sign-in** (required — the app has no signup/login screen,
+   everyone gets an anonymous Supabase session when they open the app):
 
-## Learn More
+   Supabase dashboard → this project → **Authentication → Sign In / Providers
+   → Anonymous Sign-Ins** → toggle **on**. There's no API for this, it has to
+   be flipped in the dashboard once.
 
-To learn more about Next.js, take a look at the following resources:
+3. **(Optional) YouTube Data API v3 key**, for real search — without it, the
+   "Add a song" screen falls back to a small built-in demo catalog so the app
+   is still fully runnable.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   - Create a key at [console.cloud.google.com](https://console.cloud.google.com),
+     enable "YouTube Data API v3".
+   - Put it in `.env.local` as `YOUTUBE_API_KEY`.
+   - Also set `SUPABASE_SERVICE_ROLE_KEY` (Project Settings → API) so search
+     results get cached server-side — the free quota is 10k units/day and
+     each search costs 100, so caching matters.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4. **Run it**
 
-## Deploy on Vercel
+   ```bash
+   npm run dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   `.env.local` is already pointed at the `arko` Supabase project (schema,
+   RLS, and realtime are already applied).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## How it works
+
+- **Host**: `/host/new` → create a room (name + skip rule) → `/host/[code]`,
+  a console with the YouTube player, queue, stats, and a "Skip now" override.
+- **Guest**: `/join` → room code + name → `/room/[code]`, tabs for Now
+  playing / Add a song / Room (leaderboard).
+- Voting, the queue, and points are all resolved **server-side** (Postgres
+  functions + a trigger on `votes`), so concurrent votes from multiple phones
+  don't race each other into skipping a song twice.
+- Playback is host-only via the YouTube IFrame API; guests only ever see a
+  read-only progress bar.
+
+See [`src/lib/room-context.tsx`](src/lib/room-context.tsx) for the realtime
+subscriptions and the Supabase migrations applied to the `arko` project for
+the full schema and game logic (`create_room`, `join_room`, `cast_vote`,
+`add_to_queue`, `host_skip`, `mark_now_playing_finished`, …).
+
+## Deploying
+
+Any Next.js host works (Vercel's free tier is a good fit). Set the same env
+vars there (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+optionally `YOUTUBE_API_KEY` / `SUPABASE_SERVICE_ROLE_KEY`).
