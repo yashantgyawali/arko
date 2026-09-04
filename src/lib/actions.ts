@@ -76,14 +76,21 @@ export async function removeMember(roomId: string, memberId: string) {
   if (error) throw error;
 }
 
-export async function hostSkip(roomId: string) {
-  const { error } = await supabase.rpc("host_skip", { p_room_id: roomId });
+// Both of these name the song they mean. Without that the server could only be
+// told "end whatever is playing", so a request that raced an advance landed on
+// the next song instead of being ignored.
+export async function hostSkip(roomId: string, queueItemId: string) {
+  const { error } = await supabase.rpc("host_skip", {
+    p_room_id: roomId,
+    p_queue_item_id: queueItemId,
+  });
   if (error) throw error;
 }
 
-export async function markNowPlayingFinished(roomId: string) {
+export async function markNowPlayingFinished(roomId: string, queueItemId: string) {
   const { error } = await supabase.rpc("mark_now_playing_finished", {
     p_room_id: roomId,
+    p_queue_item_id: queueItemId,
   });
   if (error) throw error;
 }
@@ -91,6 +98,24 @@ export async function markNowPlayingFinished(roomId: string) {
 export async function markPlaybackStarted(roomId: string) {
   const { error } = await supabase.rpc("mark_playback_started", {
     p_room_id: roomId,
+  });
+  if (error) throw error;
+}
+
+// Pause is room state, not just the host's own player — everyone's clock has
+// to stop with the music.
+export async function pausePlayback(roomId: string, queueItemId: string) {
+  const { error } = await supabase.rpc("pause_playback", {
+    p_room_id: roomId,
+    p_queue_item_id: queueItemId,
+  });
+  if (error) throw error;
+}
+
+export async function resumePlayback(roomId: string, queueItemId: string) {
+  const { error } = await supabase.rpc("resume_playback", {
+    p_room_id: roomId,
+    p_queue_item_id: queueItemId,
   });
   if (error) throw error;
 }

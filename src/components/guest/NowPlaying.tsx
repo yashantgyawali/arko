@@ -8,7 +8,7 @@ import { VoteMeter } from "@/components/VoteMeter";
 import { Logo } from "@/components/Logo";
 
 export function NowPlaying() {
-  const { room, members, votes, myMember, nowPlaying, elapsedS } = useRoomContext();
+  const { room, members, votes, myMember, nowPlaying, elapsedS, isPaused } = useRoomContext();
 
   if (!room) return null;
 
@@ -188,6 +188,26 @@ export function NowPlaying() {
               </div>
             )}
           </div>
+
+          {started && isPaused && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                background: "rgba(19,13,1,.62)",
+              }}
+            >
+              <span style={{ fontSize: 30, color: "var(--beige)" }}>❙❙</span>
+              <span style={{ color: "var(--beige)", fontWeight: 700, fontSize: 14 }}>
+                paused by the host
+              </span>
+            </div>
+          )}
 
           {!started && (
             <div

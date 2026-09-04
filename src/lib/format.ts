@@ -3,6 +3,28 @@ export function mmss(totalSeconds: number): string {
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
 
+/**
+ * How far into the current song we actually are, in seconds — the one place
+ * that answers this, so the host's seek offset, the progress bar and every
+ * guest's clock can never disagree.
+ *
+ * Anchored to when audio genuinely began rather than when the server promoted
+ * the song (those differ by however long the player took to start), and it
+ * stops dead while the room is paused rather than running on against
+ * wall-clock time.
+ */
+export function songElapsedS(song: {
+  audio_started_at: string | null;
+  paused_at: string | null;
+  paused_ms: number;
+}, roomStartedAt: string | null): number {
+  const anchor = song.audio_started_at ?? roomStartedAt;
+  if (!anchor) return 0;
+  const until = song.paused_at ? new Date(song.paused_at).getTime() : Date.now();
+  const ms = until - new Date(anchor).getTime() - (song.paused_ms || 0);
+  return Math.max(0, ms / 1000);
+}
+
 export function thumb(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
 }

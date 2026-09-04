@@ -7,12 +7,14 @@ import {
   hostSkip,
   markNowPlayingFinished,
   markPlaybackStarted,
+  pausePlayback,
   removeFromQueue,
   removeMember,
+  resumePlayback,
   updateRoomSettings,
 } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
-import { initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, threshold, thumb, type SkipRule } from "@/lib/format";
+import { initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, songElapsedS, threshold, thumb, type SkipRule } from "@/lib/format";
 import { STALLED, useYouTubePlayer } from "@/lib/use-youtube-player";
 import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
@@ -29,7 +31,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 ];
 
 export function HostConsole() {
-  const { loading, notFound, authError, userId, room, members, votes, queue, nowPlaying, queued, elapsedS } =
+  const { loading, notFound, authError, userId, room, members, votes, queue, nowPlaying, queued, elapsedS, isPaused } =
     useRoomContext();
   const [showSettings, setShowSettings] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
@@ -83,56 +85,75 @@ export function HostConsole() {
     };
   }, [loading, notFound]);
 
-  const { containerRef, loadVideo, play, pause, stop, resume, isPlaying, needsTap } = useYouTubePlayer(
+  const { containerRef, loadVideo, play, pause, stop, resume, needsTap } = useYouTubePlayer(
     () => {
-      if (room && isHost) markNowPlayingFinished(room.id).catch(console.error);
+      // lastLoadedRef, not nowPlaying: this reports the end of the song the
+      // player was actually playing. Reading nowPlaying here would name
+      // whatever became current in the meantime, which is exactly the
+      // mistarget the fencing token exists to prevent.
+      const endedId = lastLoadedRef.current;
+      if (room && isHost && endedId) markNowPlayingFinished(room.id, endedId).catch(console.error);
     },
     (code) => {
       if (!room || !isHost) return;
+      // Surfaced, never acted on: a song leaves the queue only on a real vote
+      // or the host's own explicit Skip. Auto-skipping here meant a transient
+      // player error silently threw away a song the room never got to hear.
       setPlaybackError(youtubeErrorReason(code));
-      hostSkip(room.id).catch(console.error);
     },
     () => {
       if (room && isHost) markPlaybackStarted(room.id).catch(console.error);
     },
   );
 
+  // Cleared when the song changes, not on a timer: it now asks the host to
+  // decide something, so it has to stay up until there's nothing to decide.
   useEffect(() => {
-    if (!playbackError) return;
-    const t = setTimeout(() => setPlaybackError(null), 5000);
-    return () => clearTimeout(t);
-  }, [playbackError]);
+    setPlaybackError(null);
+  }, [nowPlaying?.id]);
 
   useEffect(() => {
-    if (nowPlaying && lastLoadedRef.current !== nowPlaying.video_id) {
-      lastLoadedRef.current = nowPlaying.video_id;
-      // Computed directly from room.started_at rather than the elapsedS
-      // ticker: that ticker lives in a parent provider and can still hold a
-      // stale value (e.g. 0) on the very render this effect fires, since
-      // child effects run before parent effects in React. Without a correct
-      // offset here, a host refreshing mid-song would see the right elapsed
-      // time on screen (that's server-derived, independent of the player)
-      // while the audio silently restarted from 0:00.
-      const startedAtMs = room?.started_at ? new Date(room.started_at).getTime() : Date.now();
-      const offset = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+    // Keyed on the queue item, not the video: the same video legitimately
+    // appears twice in a row (people queue duplicates), and keying on video_id
+    // meant the player was never reloaded for the second one. It then sat in
+    // ENDED, never re-entered PLAYING, never stamped audio_started_at — and
+    // since a song that never started can no longer be finished, that would
+    // strand the room on it forever.
+    if (nowPlaying && lastLoadedRef.current !== nowPlaying.id) {
+      lastLoadedRef.current = nowPlaying.id;
+      // Only a song that genuinely started playing can be resumed part-way —
+      // that's what a host refreshing mid-song needs. Measuring instead from
+      // rooms.started_at (set server-side the moment the song was queued up)
+      // meant any gap before audio actually began counted as playback, and
+      // any skew between the browser clock and the Postgres clock counted
+      // too. An offset past the end makes YouTube fire ENDED at once, which
+      // reads as "the song finished" — so it's clamped inside the song.
+      const elapsed = Math.floor(songElapsedS(nowPlaying, room?.started_at ?? null));
+      const offset = nowPlaying.audio_started_at
+        ? Math.max(0, Math.min(elapsed, Math.max(0, nowPlaying.duration_s - 5)))
+        : 0;
       loadVideo(nowPlaying.video_id, offset);
     } else if (!nowPlaying && lastLoadedRef.current !== null) {
       lastLoadedRef.current = null;
       stop();
     }
-  }, [nowPlaying, loadVideo, stop, room?.started_at]);
+  }, [nowPlaying, loadVideo, stop]);
 
-  // Safety net: if the embedded player never fires ENDED (autoplay blocked,
-  // player error, tab was backgrounded), the server-side elapsed clock is
-  // still the source of truth — advance the queue once it runs past the
-  // song's duration so a stuck player can't freeze the room. Only the host's
-  // own session may act on this — a non-host viewer (or an in-flight auth
-  // check) must never attempt it.
+  // Follow the room's pause state, so a pause from one host tab or device
+  // applies to the player wherever the audio is actually coming from. Acts
+  // only on a change: re-issuing play() on every render would fight the
+  // blocked-autoplay prompt.
+  const wasPausedRef = useRef<boolean | null>(null);
   useEffect(() => {
-    if (!room || !nowPlaying || !isHost) return;
-    if (elapsedS < nowPlaying.duration_s + 3) return;
-    markNowPlayingFinished(room.id).catch(console.error);
-  }, [room, nowPlaying, elapsedS, isHost]);
+    if (wasPausedRef.current === null) {
+      wasPausedRef.current = isPaused;
+      return;
+    }
+    if (wasPausedRef.current === isPaused) return;
+    wasPausedRef.current = isPaused;
+    if (isPaused) pause();
+    else play();
+  }, [isPaused, pause, play]);
 
   useEffect(() => {
     if (!room?.last_verdict || !room.last_verdict_at) return;
@@ -305,7 +326,7 @@ export function HostConsole() {
               fontWeight: 600,
             }}
           >
-            <span>{playbackError} Skipping to the next song.</span>
+            <span>{playbackError} Hit &ldquo;Skip now&rdquo; to move on — the room keeps it otherwise.</span>
           </div>
         )}
 
@@ -372,7 +393,18 @@ export function HostConsole() {
                     <div style={{ flex: 1 }} />
                     <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                       <button
-                        onClick={() => (needsTap ? resume() : isPlaying ? pause() : play())}
+                        onClick={() => {
+                          if (needsTap) return resume();
+                          // Pause is written to the room so every guest's
+                          // clock stops with the music, then applied locally.
+                          if (isPaused) {
+                            resumePlayback(room.id, nowPlaying.id).catch(console.error);
+                            play();
+                          } else {
+                            pausePlayback(room.id, nowPlaying.id).catch(console.error);
+                            pause();
+                          }
+                        }}
                         className="btn btn-secondary"
                         style={
                           needsTap
@@ -380,9 +412,9 @@ export function HostConsole() {
                             : { padding: "12px 22px", fontSize: 15, border: "2px solid var(--ink)" }
                         }
                       >
-                        {needsTap ? "▶ Tap to play" : isPlaying ? "Pause" : "Play"}
+                        {needsTap ? "▶ Tap to play" : isPaused ? "Play" : "Pause"}
                       </button>
-                      <button onClick={() => hostSkip(room.id).catch(console.error)} className="btn btn-dark" style={{ padding: "12px 22px", fontSize: 15 }}>
+                      <button onClick={() => hostSkip(room.id, nowPlaying.id).catch(console.error)} className="btn btn-dark" style={{ padding: "12px 22px", fontSize: 15 }}>
                         Skip now
                       </button>
                       {/* explains a destructive control — system font, not the

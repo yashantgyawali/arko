@@ -48,6 +48,8 @@ export type Database = {
           artist: string
           audio_started_at: string | null
           created_at: string
+          paused_at: string | null
+          paused_ms: number
           duration_s: number
           id: string
           locked: boolean
@@ -63,6 +65,8 @@ export type Database = {
           artist: string
           audio_started_at?: string | null
           created_at?: string
+          paused_at?: string | null
+          paused_ms?: number
           duration_s: number
           id?: string
           locked?: boolean
@@ -163,17 +167,25 @@ export type Database = {
         Args: { p_name: string; p_skip_rule?: string }
         Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
-      host_skip: { Args: { p_room_id: string }; Returns: undefined }
+      host_skip: { Args: { p_room_id: string; p_queue_item_id?: string }; Returns: undefined }
       join_room: {
         Args: { p_code: string; p_display_name: string }
         Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
       mark_now_playing_finished: {
-        Args: { p_room_id: string }
+        Args: { p_room_id: string; p_queue_item_id?: string }
         Returns: undefined
       }
       mark_playback_started: {
         Args: { p_room_id: string }
+        Returns: undefined
+      }
+      pause_playback: {
+        Args: { p_room_id: string; p_queue_item_id: string }
+        Returns: undefined
+      }
+      resume_playback: {
+        Args: { p_room_id: string; p_queue_item_id: string }
         Returns: undefined
       }
       remove_from_queue: {

@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { songElapsedS } from "@/lib/format";
 import { supabase } from "@/lib/supabase/client";
 import { useAnonAuth } from "@/lib/use-anon-auth";
 import type { Database } from "@/lib/supabase/database.types";
@@ -29,6 +30,7 @@ type RoomContextValue = {
   nowPlaying: QueueItemRow | null;
   queued: QueueItemRow[];
   elapsedS: number;
+  isPaused: boolean;
 };
 
 const RoomContext = createContext<RoomContextValue | null>(null);
@@ -248,27 +250,43 @@ export function RoomProvider({
     };
   }, [nowPlayingId]);
 
-  // elapsed time ticker, derived from started_at so late joiners land correctly
-  useEffect(() => {
-    if (!room?.started_at) {
-      setElapsedS(0);
-      return;
-    }
-    const startedAt = new Date(room.started_at).getTime();
-    const tick = () => setElapsedS(Math.max(0, (Date.now() - startedAt) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [room?.started_at, room?.now_playing_id]);
-
   const myMember = useMemo(
     () => members.find((m) => m.user_id === userId) ?? null,
     [members, userId],
   );
+  // Must actually be playing. resync() fetches the room and the queue as three
+  // separate statements, so the two can straddle an advance and briefly
+  // disagree — pointing now_playing_id at a row the queue already shows as
+  // played. Requiring status here keeps a half-updated snapshot from being
+  // treated as the current song.
   const nowPlaying = useMemo(
-    () => queue.find((q) => q.id === room?.now_playing_id) ?? null,
+    () => queue.find((q) => q.id === room?.now_playing_id && q.status === "playing") ?? null,
     [queue, room?.now_playing_id],
   );
+
+  // The room is paused for everyone or nobody — the host's Pause writes it to
+  // the current song, so every client freezes at the same point.
+  const isPaused = !!nowPlaying?.paused_at;
+
+  // Elapsed ticker. All the actual arithmetic lives in songElapsedS so the
+  // host's seek offset and every guest's clock are computed the same way.
+  // While paused there is nothing to tick — the value is pinned.
+  const anchor = nowPlaying?.audio_started_at ?? room?.started_at ?? null;
+  const pausedAt = nowPlaying?.paused_at ?? null;
+  const pausedMs = nowPlaying?.paused_ms ?? 0;
+  useEffect(() => {
+    if (!anchor) {
+      setElapsedS(0);
+      return;
+    }
+    const song = { audio_started_at: anchor, paused_at: pausedAt, paused_ms: pausedMs };
+    const tick = () => setElapsedS(songElapsedS(song, anchor));
+    tick();
+    if (pausedAt) return;
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [anchor, pausedAt, pausedMs, room?.now_playing_id]);
+
   const queued = useMemo(
     () =>
       queue
@@ -290,6 +308,7 @@ export function RoomProvider({
     nowPlaying,
     queued,
     elapsedS,
+    isPaused,
   };
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
