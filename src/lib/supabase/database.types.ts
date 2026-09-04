@@ -93,6 +93,8 @@ export type Database = {
           now_playing_id: string | null
           skip_rule: string
           started_at: string | null
+          last_active_at: string
+          retired_at: string | null
         }
         Insert: {
           ahoy_lock?: boolean
@@ -106,6 +108,8 @@ export type Database = {
           now_playing_id?: string | null
           skip_rule?: string
           started_at?: string | null
+          last_active_at?: string
+          retired_at?: string | null
         }
         Update: Partial<Database["public"]["Tables"]["rooms"]["Insert"]>
         Relationships: []
@@ -168,6 +172,7 @@ export type Database = {
         Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
       host_skip: { Args: { p_room_id: string; p_queue_item_id?: string }; Returns: undefined }
+      leave_room: { Args: { p_room_id: string }; Returns: undefined }
       join_room: {
         Args: { p_code: string; p_display_name: string }
         Returns: Database["public"]["Tables"]["rooms"]["Row"]

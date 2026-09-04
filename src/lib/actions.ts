@@ -68,6 +68,14 @@ export async function removeFromQueue(roomId: string, queueItemId: string) {
   if (error) throw error;
 }
 
+// Leaving actually removes you, so you stop counting toward the vote
+// threshold — a guest who walked out was quietly making every song harder to
+// vote out. Songs you queued stay in the queue; your votes go with you.
+export async function leaveRoom(roomId: string) {
+  const { error } = await supabase.rpc("leave_room", { p_room_id: roomId });
+  if (error) throw error;
+}
+
 export async function removeMember(roomId: string, memberId: string) {
   const { error } = await supabase.rpc("remove_member", {
     p_room_id: roomId,

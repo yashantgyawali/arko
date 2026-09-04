@@ -130,9 +130,6 @@ export default function CreateRoomPage() {
                 {error ?? authError}
               </div>
             )}
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brown)", opacity: 0.75 }}>
-              build 6 · {ready ? "signed in" : "no session"}
-            </div>
           </div>
         </div>
 

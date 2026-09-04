@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
-import { clearVerdict } from "@/lib/actions";
+import { useRouter } from "next/navigation";
+import { clearVerdict, leaveRoom } from "@/lib/actions";
 import { inviteLink, thumb } from "@/lib/format";
 import type { Track } from "@/lib/catalog";
 import { NowPlaying } from "@/components/guest/NowPlaying";
@@ -14,7 +15,9 @@ import { Toast } from "@/components/Toast";
 
 export function GuestApp() {
   const { loading, notFound, authError, room, nowPlaying, myMember } = useRoomContext();
+  const router = useRouter();
   const [screen, setScreen] = useState<GuestScreen>("room");
+  const [leaving, setLeaving] = useState(false);
   const [toast, setToast] = useState<{ text: string; thumbUrl?: string } | null>(null);
 
   // Once you've genuinely been a member, myMember going back to null means
@@ -24,7 +27,9 @@ export function GuestApp() {
   // non-member and there'd be nothing on screen saying why.
   const wasMemberRef = useRef(false);
   if (myMember) wasMemberRef.current = true;
-  const removed = wasMemberRef.current && !myMember && !loading;
+  // Excludes a voluntary exit: leaving also drops myMember, and telling
+  // someone they were removed when they just tapped Exit would be nonsense.
+  const removed = wasMemberRef.current && !myMember && !loading && !leaving;
 
   useEffect(() => {
     if (!toast) return;
@@ -41,6 +46,18 @@ export function GuestApp() {
     return () => clearTimeout(t);
   }, [room?.id, room?.last_verdict, room?.last_verdict_at]);
 
+  const leave = async () => {
+    if (!room) return;
+    setLeaving(true);
+    try {
+      await leaveRoom(room.id);
+    } catch (err) {
+      console.error(err);
+    }
+    router.replace("/");
+  };
+
+  if (leaving) return <Centered>Leaving the room…</Centered>;
   if (authError) {
     return (
       <Centered>
@@ -88,7 +105,7 @@ export function GuestApp() {
 
   return (
     <div className="guest-shell">
-      {screen === "room" && <RoomTab onShare={shareInvite} />}
+      {screen === "room" && <RoomTab onShare={shareInvite} onLeave={leave} />}
       {screen === "vote" && <NowPlaying />}
       {screen === "search" && <AddSong onAdded={onAdded} />}
 

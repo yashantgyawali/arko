@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
 import { initial, roomSize, threshold, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
@@ -8,11 +9,20 @@ const CARD_BG = "var(--paper)";
 const CARD_BORDER = "var(--brown)";
 const MUTED = "var(--brown)";
 
-export function RoomTab({ onShare }: { onShare: () => void }) {
+export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: () => void }) {
   const { room, members, myMember } = useRoomContext();
   // The host never votes or gets scored — showing up in this leaderboard
   // would read as the host competing in their own room.
   const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
+  // Two taps to leave: it deletes your member row, so your score goes with it
+  // and a mis-tap would be genuinely annoying to undo.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3000);
+    return () => clearTimeout(t);
+  }, [armed]);
+
   const rule = room?.skip_rule as SkipRule;
   const total = roomSize(members);
   const th = threshold(rule, total);
@@ -187,6 +197,34 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* The host owns the room and is the machine playing the music —
+            there's no coherent "leave" for them, so don't offer it. */}
+        {!myMember?.is_host && (
+        <>
+        <button
+          onClick={() => (armed ? onLeave() : setArmed(true))}
+          className="tap"
+          style={{
+            marginTop: 28,
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: "var(--radius-md)",
+            border: `1px solid ${armed ? "var(--red)" : CARD_BORDER}`,
+            background: armed ? "var(--red)" : "transparent",
+            color: armed ? "var(--paper)" : "var(--brown)",
+            fontWeight: 700,
+            fontSize: 15,
+            cursor: "pointer",
+          }}
+        >
+          {armed ? "Tap again to leave" : "Exit room"}
+        </button>
+        <div style={{ marginTop: 8, textAlign: "center", fontSize: 12, color: MUTED }}>
+          Songs you queued stay. Your score doesn&apos;t.
+        </div>
+        </>
+        )}
       </div>
     </div>
   );

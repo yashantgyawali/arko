@@ -31,14 +31,6 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
   // Arrived from an invite link: the code is settled, so the only thing left
   // to do is say who you are. Don't make them re-key what the link carried.
   const [codeFromLink, setCodeFromLink] = useState(initialCode.length === 4);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Proves React actually mounted on this device. If the badge below never
-  // says "ready", the button has no handler and no amount of tapping will work.
-  useEffect(() => {
-    setHydrated(true);
-    (window as unknown as { __arkoHydrated?: boolean }).__arkoHydrated = true;
-  }, []);
 
   // Read the remembered name after mount, not as the initial state — this
   // page is server-rendered, and localStorage isn't available there. Setting
@@ -190,9 +182,6 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
       {/* Never leave the primary action disabled without saying why. */}
       <div style={{ marginTop: 12, textAlign: "center", fontSize: 13, color: "var(--brown)", fontWeight: 600, minHeight: 20 }}>
         {hint ?? (!ready ? "Connecting…" : codeFromLink ? "You were invited to this room." : "")}
-        <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, opacity: 0.75 }}>
-          build 6 · {hydrated ? "react ready" : "react NOT mounted"} · {ready ? "signed in" : "no session"}
-        </div>
       </div>
     </main>
   );

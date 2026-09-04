@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { songElapsedS } from "@/lib/format";
 import { supabase } from "@/lib/supabase/client";
 import { useAnonAuth } from "@/lib/use-anon-auth";
@@ -41,6 +42,11 @@ export function useRoomContext() {
   return ctx;
 }
 
+// Matches the six-hour window retire_idle_rooms() uses server-side. Checked
+// here too so a room that has gone quiet reads as closed immediately, rather
+// than staying open until the next hourly sweep happens to run.
+const IDLE_RETIRE_MS = 6 * 60 * 60 * 1000;
+
 export function RoomProvider({
   code,
   children,
@@ -48,6 +54,7 @@ export function RoomProvider({
   code: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const { userId, ready } = useAnonAuth();
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -295,6 +302,16 @@ export function RoomProvider({
     [queue],
   );
 
+  // A retired room has no live queue, no playback and refuses writes, so there
+  // is nothing to show — send people home instead of dropping them into a dead
+  // room with a stale queue.
+  const retired =
+    !!room &&
+    (!!room.retired_at || Date.now() - new Date(room.last_active_at).getTime() > IDLE_RETIRE_MS);
+  useEffect(() => {
+    if (retired) router.replace("/");
+  }, [retired, router]);
+
   const value: RoomContextValue = {
     loading,
     notFound,
@@ -310,6 +327,17 @@ export function RoomProvider({
     elapsedS,
     isPaused,
   };
+
+  if (retired) {
+    return (
+      <div style={{ minHeight: "var(--app-h)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>This room has closed</div>
+          <div style={{ color: "var(--brown)", fontSize: 14 }}>Taking you home…</div>
+        </div>
+      </div>
+    );
+  }
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 }
