@@ -19,6 +19,7 @@ import { STALLED, useYouTubePlayer } from "@/lib/use-youtube-player";
 import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
 import { Logo } from "@/components/Logo";
+import { InviteQr } from "@/components/host/InviteQr";
 
 const RULES: SkipRule[] = ["majority", "two_thirds", "anyone"];
 
@@ -266,6 +267,13 @@ export function HostConsole() {
               {copied === "code" ? "✓" : "Code"}
             </button>
           </div>
+
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <InviteQr code={room.code} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brown)" }}>
+              Tap to enlarge for the room
+            </span>
+          </div>
         </div>
       </div>
 
@@ -277,6 +285,9 @@ export function HostConsole() {
             </div>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20, letterSpacing: "0.14em" }}>{room.code}</div>
           </div>
+          {/* The sidebar (and its QR) is desktop-only, so without this a host
+              on a narrow screen would have no way to show a code to scan. */}
+          <InviteQr code={room.code} size={40} />
           <button onClick={copyInvite} className="btn btn-secondary tap" style={{ padding: "10px 14px", fontSize: 13, border: "2px solid var(--ink)" }}>
             {copied === "link" ? "Copied!" : "Copy link"}
           </button>

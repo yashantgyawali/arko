@@ -73,13 +73,22 @@ export function ruleHelp(rule: SkipRule): string {
 }
 
 /**
+ * The canonical public origin. Anything a guest reaches from a different
+ * device — an invite link, a QR code scanned across the room — has to be
+ * absolute and has to point here. window.location.origin would bake in
+ * whatever the host happens to be running (localhost in development, or the
+ * raw hosting subdomain), which is useless on someone else's phone.
+ */
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://arkogana.tumlet.com"
+).replace(/\/+$/, "");
+
+/**
  * A link that carries the room code, so an invited guest only has to type a
  * name. Sharing a bare code means the recipient has to be told it separately.
  */
 export function inviteLink(code: string): string {
-  const path = `/join?code=${encodeURIComponent(code)}`;
-  if (typeof window === "undefined") return path;
-  return `${window.location.origin}${path}`;
+  return `${SITE_URL}/join?code=${encodeURIComponent(code)}`;
 }
 
 export function relativeTime(iso: string): string {
