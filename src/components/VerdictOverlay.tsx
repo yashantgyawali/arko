@@ -46,7 +46,7 @@ export function VerdictOverlay({
           textShadow: `${shadowOffset}px ${shadowOffset}px 0 ${shadow}`,
         }}
       >
-        {isAhoy ? "AHOY" : "NEIN"}
+        {isAhoy ? "Ahoy" : "Nein"}
       </div>
       <div
         style={{

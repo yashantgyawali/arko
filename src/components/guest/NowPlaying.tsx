@@ -254,11 +254,11 @@ export function NowPlaying() {
             </button>
           </div>
         )}
-        <div style={{ textAlign: "center", fontSize: 13, fontWeight: 600, color: "var(--brown)", marginTop: 8 }}>
-          {myVote
-            ? "Tap the other one to change your mind."
-            : `Only ${host?.display_name ?? "the host"} can control playback.`}
-        </div>
+        {myVote && (
+          <div style={{ textAlign: "center", fontSize: 13, fontWeight: 600, color: "var(--brown)", marginTop: 8 }}>
+            Tap the other one to change your mind.
+          </div>
+        )}
       </div>
     </div>
   );

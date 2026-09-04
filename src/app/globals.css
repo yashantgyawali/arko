@@ -252,9 +252,10 @@ button:focus-visible {
   border: 0;
   cursor: pointer;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 2px;
   transition: opacity 150ms ease;
 }
 .vote-btn:hover {
@@ -366,8 +367,13 @@ button:focus-visible {
 }
 .tabbar-btn {
   min-height: 52px;
-  padding: 12px 4px 10px;
-  font-size: 13px;
+  padding: 9px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 12px;
   text-align: center;
   border: 0;
   border-top: 3px solid transparent;
