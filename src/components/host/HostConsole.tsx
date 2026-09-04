@@ -6,6 +6,7 @@ import {
   clearVerdict,
   hostSkip,
   markNowPlayingFinished,
+  markPlaybackStarted,
   removeFromQueue,
   removeMember,
   updateRoomSettings,
@@ -90,6 +91,9 @@ export function HostConsole() {
       if (!room || !isHost) return;
       setPlaybackError(youtubeErrorReason(code));
       hostSkip(room.id).catch(console.error);
+    },
+    () => {
+      if (room && isHost) markPlaybackStarted(room.id).catch(console.error);
     },
   );
 
@@ -196,29 +200,8 @@ export function HostConsole() {
   return (
     <div className="console-shell">
       <div className="console-sidebar">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px 22px" }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: "var(--radius-sm)",
-              background: "var(--red)",
-              border: "2px solid var(--ink)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: "var(--font-display)",
-              fontWeight: 800,
-              fontSize: 17,
-              color: "var(--paper)",
-            }}
-          >
-            a
-          </div>
-          <Logo height={19} />
-          <span style={{ borderRadius: 999, border: "1px solid var(--brown)", color: "var(--brown)", fontSize: 12, fontWeight: 600, padding: "2px 10px" }}>
-            host
-          </span>
+        <div style={{ display: "flex", alignItems: "center", padding: "0 4px 22px" }}>
+          <Logo height={30} />
         </div>
 
         <nav aria-label="Console sections" style={{ display: "flex", flexDirection: "column", gap: 6 }}>

@@ -88,6 +88,13 @@ export async function markNowPlayingFinished(roomId: string) {
   if (error) throw error;
 }
 
+export async function markPlaybackStarted(roomId: string) {
+  const { error } = await supabase.rpc("mark_playback_started", {
+    p_room_id: roomId,
+  });
+  if (error) throw error;
+}
+
 export async function clearVerdict(roomId: string) {
   const { error } = await supabase.rpc("clear_verdict", { p_room_id: roomId });
   if (error) throw error;

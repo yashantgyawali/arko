@@ -5,7 +5,6 @@ import { useRoomContext } from "@/lib/room-context";
 import { clearVerdict } from "@/lib/actions";
 import { inviteLink, thumb } from "@/lib/format";
 import type { Track } from "@/lib/catalog";
-import { Lobby } from "@/components/guest/Lobby";
 import { NowPlaying } from "@/components/guest/NowPlaying";
 import { AddSong } from "@/components/guest/AddSong";
 import { RoomTab } from "@/components/guest/RoomTab";
@@ -15,7 +14,7 @@ import { Toast } from "@/components/Toast";
 
 export function GuestApp() {
   const { loading, notFound, authError, room, nowPlaying, myMember } = useRoomContext();
-  const [screen, setScreen] = useState<GuestScreen>("lobby");
+  const [screen, setScreen] = useState<GuestScreen>("room");
   const [toast, setToast] = useState<{ text: string; thumbUrl?: string } | null>(null);
 
   // Once you've genuinely been a member, myMember going back to null means
@@ -89,10 +88,9 @@ export function GuestApp() {
 
   return (
     <div className="guest-shell">
-      {screen === "lobby" && <Lobby onShare={shareInvite} />}
+      {screen === "room" && <RoomTab onShare={shareInvite} />}
       {screen === "vote" && <NowPlaying />}
       {screen === "search" && <AddSong onAdded={onAdded} />}
-      {screen === "room" && <RoomTab onShare={shareInvite} />}
 
       <TabBar screen={screen} onChange={setScreen} />
 

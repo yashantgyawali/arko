@@ -1,6 +1,6 @@
 "use client";
 
-export type GuestScreen = "lobby" | "vote" | "search" | "room";
+export type GuestScreen = "vote" | "search" | "room";
 
 function NowPlayingIcon() {
   return (
@@ -33,9 +33,9 @@ function RoomIcon() {
 }
 
 const TABS: { key: GuestScreen; label: string; Icon: () => React.JSX.Element }[] = [
+  { key: "room", label: "Room", Icon: RoomIcon },
   { key: "vote", label: "Now playing", Icon: NowPlayingIcon },
   { key: "search", label: "Add a song", Icon: AddSongIcon },
-  { key: "room", label: "Room", Icon: RoomIcon },
 ];
 
 export function TabBar({ screen, onChange }: { screen: GuestScreen; onChange: (s: GuestScreen) => void }) {

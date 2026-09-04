@@ -84,7 +84,7 @@ function loadYouTubeApi(): Promise<void> {
  * vote meter and elapsed time are keyed off the server's `started_at`, which
  * only a real skip/replay is allowed to reset.
  */
-export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) => void) {
+export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) => void, onPlaying?: () => void) {
   const playerRef = useRef<YTPlayer | null>(null);
   const readyRef = useRef(false);
   const pendingVideo = useRef<LoadTarget | null>(null);
@@ -92,6 +92,11 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
   onEndedRef.current = onEnded;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onPlayingRef = useRef(onPlaying);
+  onPlayingRef.current = onPlaying;
+  // Fires onPlaying once per loaded video — a pause/resume cycle re-enters
+  // PLAYING without meaning "the song just started" again.
+  const reportedPlayingRef = useRef(false);
   const cancelledRef = useRef(false);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -178,6 +183,10 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
               clearWatchdog();
               setNeedsTap(false);
               setIsPlaying(true);
+              if (!reportedPlayingRef.current) {
+                reportedPlayingRef.current = true;
+                onPlayingRef.current?.();
+              }
             }
             if (e.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
           },
@@ -203,6 +212,7 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
     (videoId: string, startSeconds = 0) => {
       setIsPlaying(true);
       setNeedsTap(false);
+      reportedPlayingRef.current = false;
       const target: LoadTarget = startSeconds > 0 ? { videoId, startSeconds } : { videoId };
       if (readyRef.current) {
         pendingVideo.current = null;

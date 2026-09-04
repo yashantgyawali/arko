@@ -46,6 +46,7 @@ export type Database = {
         Row: {
           added_by: string | null
           artist: string
+          audio_started_at: string | null
           created_at: string
           duration_s: number
           id: string
@@ -60,6 +61,7 @@ export type Database = {
         Insert: {
           added_by?: string | null
           artist: string
+          audio_started_at?: string | null
           created_at?: string
           duration_s: number
           id?: string
@@ -167,6 +169,10 @@ export type Database = {
         Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
       mark_now_playing_finished: {
+        Args: { p_room_id: string }
+        Returns: undefined
+      }
+      mark_playback_started: {
         Args: { p_room_id: string }
         Returns: undefined
       }
