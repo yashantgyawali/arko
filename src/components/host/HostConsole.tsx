@@ -338,37 +338,6 @@ export function HostConsole() {
                 {!nowPlaying && (
                   <div style={{ position: "absolute", inset: 0, background: "var(--ink)" }} />
                 )}
-                {nowPlaying && needsTap && (
-                  // Browsers block autoplay that wasn't triggered by a direct
-                  // click — true for every song, since it's started by a
-                  // realtime event, not a click. Losing the song to an
-                  // auto-skip over a browser policy would be worse than
-                  // asking for one tap to unblock it.
-                  <button
-                    onClick={resume}
-                    className="tap"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      background: "rgba(20,16,12,0.82)",
-                      color: "var(--beige)",
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span style={{ fontSize: 34 }}>▶</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, textAlign: "center", padding: "0 16px" }}>
-                      Tap to start playback
-                    </span>
-                  </button>
-                )}
               </div>
               <div style={{ flex: 1, minWidth: 240, display: "flex", flexDirection: "column" }}>
                 {nowPlaying ? (
@@ -403,11 +372,15 @@ export function HostConsole() {
                     <div style={{ flex: 1 }} />
                     <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                       <button
-                        onClick={() => (isPlaying ? pause() : play())}
+                        onClick={() => (needsTap ? resume() : isPlaying ? pause() : play())}
                         className="btn btn-secondary"
-                        style={{ padding: "12px 22px", fontSize: 15, border: "2px solid var(--ink)" }}
+                        style={
+                          needsTap
+                            ? { padding: "12px 22px", fontSize: 15, border: "2px solid var(--ink)", background: "var(--yellow)", color: "var(--ink)" }
+                            : { padding: "12px 22px", fontSize: 15, border: "2px solid var(--ink)" }
+                        }
                       >
-                        {isPlaying ? "Pause" : "Play"}
+                        {needsTap ? "▶ Tap to play" : isPlaying ? "Pause" : "Play"}
                       </button>
                       <button onClick={() => hostSkip(room.id).catch(console.error)} className="btn btn-dark" style={{ padding: "12px 22px", fontSize: 15 }}>
                         Skip now
@@ -418,6 +391,15 @@ export function HostConsole() {
                         {nowPlaying.locked ? "The room locked this one in." : "Overrides the vote."}
                       </span>
                     </div>
+                    {needsTap && (
+                      // The browser blocked autoplay because this song started
+                      // itself (a realtime event, not a click) — not because
+                      // anything is broken. Explained beside the controls, not
+                      // over the video, so the video stays visible throughout.
+                      <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: "var(--red)" }}>
+                        Your browser blocked autoplay. Tap play to start it.
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%" }}>

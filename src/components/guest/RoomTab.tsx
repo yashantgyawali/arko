@@ -4,9 +4,9 @@ import { useRoomContext } from "@/lib/room-context";
 import { initial, roomSize, threshold, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
 
-const CARD_BG = "rgba(250,241,228,0.06)";
-const CARD_BORDER = "rgba(250,241,228,0.16)";
-const MUTED = "rgba(250,241,228,0.62)";
+const CARD_BG = "var(--paper)";
+const CARD_BORDER = "var(--brown)";
+const MUTED = "var(--brown)";
 
 export function RoomTab({ onShare }: { onShare: () => void }) {
   const { room, members, myMember } = useRoomContext();
@@ -20,7 +20,7 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
   if (!room) return null;
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--ink)", color: "var(--paper)", animation: "nFade 300ms ease" }}>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", background: "var(--beige)", color: "var(--ink)", animation: "nFade 300ms ease" }}>
       <div className="pane-scroll" style={{ padding: "22px 16px 40px" }}>
         <div style={{ fontFamily: "var(--font-hand)", fontSize: 21, color: "var(--red)" }}>you&apos;re in</div>
         <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 32, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
@@ -84,8 +84,8 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
                   gap: 12,
                   padding: "10px 12px",
                   borderRadius: "var(--radius-md)",
-                  border: `1px solid ${mine ? "var(--yellow)" : CARD_BORDER}`,
-                  background: CARD_BG,
+                  border: `1px solid ${mine ? "var(--ink)" : CARD_BORDER}`,
+                  background: mine ? "var(--beige)" : CARD_BG,
                 }}
               >
                 <div style={{ width: 22, textAlign: "center", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: MUTED, flex: "none" }}>
@@ -135,7 +135,7 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
                     width: 34,
                     height: 34,
                     borderRadius: "var(--radius-sm)",
-                    border: `1px solid ${CARD_BORDER}`,
+                    border: "2px solid var(--ink)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -143,6 +143,7 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
                     fontWeight: 800,
                     fontSize: 15,
                     flex: "none",
+                    background: "var(--beige)",
                   }}
                 >
                   {t.name === "Crowd pleaser" ? "★" : t.name === "Room villain" ? "!" : t.name === "Nein machine" ? "×" : "+"}
@@ -163,7 +164,7 @@ export function RoomTab({ onShare }: { onShare: () => void }) {
           <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18 }}>How it works</div>
           <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ width: 22, height: 22, borderRadius: 999, background: "var(--paper)", flex: "none" }} />
+              <div style={{ width: 22, height: 22, borderRadius: 999, background: "var(--ink)", flex: "none" }} />
               <div style={{ fontSize: 14 }}>
                 {rule === "anyone"
                   ? "One Nein skips the song. Brutal room."

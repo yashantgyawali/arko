@@ -46,7 +46,9 @@ function callWhenReady(getPlayer: () => YTPlayer | null, fn: (p: YTPlayer) => vo
   setTimeout(() => callWhenReady(getPlayer, fn, attempt + 1), 100);
 }
 
-/** Synthetic error code for "the player never started", see armWatchdog. */
+/** Synthetic error code for real, unrecoverable playback errors — kept for
+ * callers that still branch on it, though nothing here calls it as an
+ * auto-skip trigger any more (see needsTap below). */
 export const STALLED = -1;
 const STALL_TIMEOUT_MS = 12000;
 // The very first song of a session loads against a player that doesn't exist
@@ -85,6 +87,7 @@ function loadYouTubeApi(): Promise<void> {
  * only a real skip/replay is allowed to reset.
  */
 export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) => void, onPlaying?: () => void) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const readyRef = useRef(false);
   const pendingVideo = useRef<LoadTarget | null>(null);
@@ -100,13 +103,11 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
   const cancelledRef = useRef(false);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
-  // The very first video of a session starts itself (a realtime event calls
-  // loadVideo, not a click), so it never carries the user gesture browsers
-  // require for unmuted autoplay — it just sits on YouTube's own paused
-  // "click to play" state forever. That's not a broken video, so the old
-  // behavior of auto-skipping on stall was throwing away a perfectly good
-  // song for a browser policy that has nothing to do with the pick. Surface
-  // it instead and let one tap (a real gesture) resume it.
+  // A song should never disappear without the room actually voting it out —
+  // so nothing in this hook auto-skips any more. Every "it's not playing"
+  // case (autoplay blocked, or the player/API itself hasn't shown up yet)
+  // collapses into this one recoverable state instead: show a prompt, let a
+  // real tap (the user gesture the browser withheld) resolve it.
   const [needsTap, setNeedsTap] = useState(false);
 
   const clearWatchdog = useCallback(() => {
@@ -120,40 +121,27 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
    * YouTube does not always fire `onError` when playback is blocked — with an
    * ad blocker or a third-party-cookie block it renders its own "An error
    * occurred" panel inside the iframe and stays silent on the API. Without a
-   * watchdog the room sits on a dead player for the whole song, so treat
-   * "never reached PLAYING" as a failure. Only genuinely give up (skip) when
-   * the player/API itself never showed up at all (still `pendingVideo`,
-   * nothing on screen to tap); once a video has actually been handed to a
-   * real player, prefer prompting for a tap over discarding the song.
+   * watchdog there'd be no sign anything needs a tap. Never auto-skips —
+   * only ever prompts.
    */
   const armWatchdog = useCallback(
     (ms = STALL_TIMEOUT_MS) => {
       clearWatchdog();
       watchdogRef.current = setTimeout(() => {
         watchdogRef.current = null;
-        if (pendingVideo.current) {
-          onErrorRef.current?.(STALLED);
-        } else {
-          setNeedsTap(true);
-        }
+        setNeedsTap(true);
       }, ms);
     },
     [clearWatchdog],
   );
 
-  const containerRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) {
-      cancelledRef.current = true;
-      playerRef.current?.destroy?.();
-      playerRef.current = null;
-      readyRef.current = false;
-      return;
-    }
-
+  const mountPlayer = useCallback(() => {
+    const node = nodeRef.current;
+    if (!node) return;
     cancelledRef.current = false;
     loadYouTubeApi().then(() => {
-      if (cancelledRef.current || !window.YT) return;
-      playerRef.current = new window.YT.Player(node, {
+      if (cancelledRef.current || !window.YT || !nodeRef.current) return;
+      playerRef.current = new window.YT.Player(nodeRef.current, {
         height: "100%",
         width: "100%",
         playerVars: {
@@ -196,9 +184,24 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
           },
         },
       });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [armWatchdog, clearWatchdog]);
+
+  const containerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      nodeRef.current = node;
+      if (!node) {
+        cancelledRef.current = true;
+        playerRef.current?.destroy?.();
+        playerRef.current = null;
+        readyRef.current = false;
+        return;
+      }
+      mountPlayer();
+    },
+    [mountPlayer],
+  );
 
   /**
    * `startSeconds` matters whenever the player is created against a song
@@ -221,7 +224,8 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
       } else {
         // Player isn't built yet (first song of the session) — onReady arms
         // the real watchdog once loadVideoById actually fires; this only
-        // guards against the API script/player never showing up at all.
+        // covers the API script/player not showing up within a generous
+        // window, which now prompts a retry rather than giving up the song.
         pendingVideo.current = target;
         armWatchdog(COLD_START_TIMEOUT_MS);
       }
@@ -231,12 +235,18 @@ export function useYouTubePlayer(onEnded: () => void, onError?: (code: number) =
 
   const play = useCallback(() => callWhenReady(() => playerRef.current, (p) => p.playVideo()), []);
   /** Resolves a needsTap prompt: a real click here is exactly the user
-   * gesture the browser withheld from the original autoplay attempt. */
+   * gesture the browser withheld from the original autoplay attempt. If the
+   * player itself never got built (cold start truly stalled), this is also
+   * the retry — build it now, on the back of this same click. */
   const resume = useCallback(() => {
     setNeedsTap(false);
-    armWatchdog();
-    callWhenReady(() => playerRef.current, (p) => p.playVideo());
-  }, [armWatchdog]);
+    armWatchdog(readyRef.current ? STALL_TIMEOUT_MS : COLD_START_TIMEOUT_MS);
+    if (readyRef.current) {
+      callWhenReady(() => playerRef.current, (p) => p.playVideo());
+    } else {
+      mountPlayer();
+    }
+  }, [armWatchdog, mountPlayer]);
   // an intentional pause must not look like a stall
   const pause = useCallback(() => {
     clearWatchdog();
