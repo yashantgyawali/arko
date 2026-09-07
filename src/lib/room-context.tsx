@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { upNextOrder } from "@/lib/derive";
 import { songElapsedS } from "@/lib/format";
 import { supabase } from "@/lib/supabase/client";
 import { useAnonAuth } from "@/lib/use-anon-auth";
@@ -294,13 +295,9 @@ export function RoomProvider({
     return () => clearInterval(id);
   }, [anchor, pausedAt, pausedMs, room?.now_playing_id]);
 
-  const queued = useMemo(
-    () =>
-      queue
-        .filter((q) => q.status === "queued")
-        .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at)),
-    [queue],
-  );
+  // Real running order, not insertion order — the server rotates between
+  // queuers, so sorting by position would show a sequence that never happens.
+  const queued = useMemo(() => upNextOrder(queue), [queue]);
 
   // A retired room has no live queue, no playback and refuses writes, so there
   // is nothing to show — send people home instead of dropping them into a dead
