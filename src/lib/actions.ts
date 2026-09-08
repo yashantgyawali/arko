@@ -128,6 +128,28 @@ export async function resumePlayback(roomId: string, queueItemId: string) {
   if (error) throw error;
 }
 
+/**
+ * Hands the whole room to whoever opens the returned link. That's a bearer
+ * credential for skipping songs, changing the rules and removing people, so
+ * the server issues it random, single-use and short-lived.
+ */
+export async function createHostHandoff(roomId: string): Promise<string> {
+  const { data, error } = await supabase.rpc("create_host_handoff", { p_room_id: roomId });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function cancelHostHandoff(roomId: string) {
+  const { error } = await supabase.rpc("cancel_host_handoff", { p_room_id: roomId });
+  if (error) throw error;
+}
+
+export async function claimHost(token: string) {
+  const { data, error } = await supabase.rpc("claim_host", { p_token: token });
+  if (error) throw error;
+  return data;
+}
+
 export async function clearVerdict(roomId: string) {
   const { error } = await supabase.rpc("clear_verdict", { p_room_id: roomId });
   if (error) throw error;

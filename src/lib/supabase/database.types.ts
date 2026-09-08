@@ -95,6 +95,8 @@ export type Database = {
           started_at: string | null
           last_active_at: string
           retired_at: string | null
+          handoff_token: string | null
+          handoff_created_at: string | null
         }
         Insert: {
           ahoy_lock?: boolean
@@ -110,6 +112,8 @@ export type Database = {
           started_at?: string | null
           last_active_at?: string
           retired_at?: string | null
+          handoff_token?: string | null
+          handoff_created_at?: string | null
         }
         Update: Partial<Database["public"]["Tables"]["rooms"]["Insert"]>
         Relationships: []
@@ -161,6 +165,12 @@ export type Database = {
           p_video_id: string
         }
         Returns: Database["public"]["Tables"]["queue_items"]["Row"]
+      }
+      create_host_handoff: { Args: { p_room_id: string }; Returns: string }
+      cancel_host_handoff: { Args: { p_room_id: string }; Returns: undefined }
+      claim_host: {
+        Args: { p_token: string }
+        Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
       cast_vote: {
         Args: { p_queue_item_id: string; p_room_id: string; p_value: string }

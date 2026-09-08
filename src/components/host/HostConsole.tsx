@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useRoomContext, type MemberRow, type RoomRow } from "@/lib/room-context";
 import {
+  cancelHostHandoff,
   clearVerdict,
+  createHostHandoff,
   hostSkip,
   markNowPlayingFinished,
   markPlaybackStarted,
@@ -14,7 +17,7 @@ import {
   updateRoomSettings,
 } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
-import { initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, songElapsedS, threshold, thumb, type SkipRule } from "@/lib/format";
+import { SITE_URL, initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, songElapsedS, threshold, thumb, type SkipRule } from "@/lib/format";
 import { STALLED, useYouTubePlayer } from "@/lib/use-youtube-player";
 import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
@@ -179,22 +182,15 @@ export function HostConsole() {
 
   if (authError) return <Centered>{authError}</Centered>;
   if (loading) return <Centered>Loading room…</Centered>;
+  // Nothing to host here, so don't strand them on a dead console. This is
+  // also how an outgoing host lands home after handing the room over: they
+  // are no longer the host or a member, so the room stops being readable to
+  // them at all and never reaches the host_id check below.
   if (notFound || !room) {
-    return (
-      <Centered>
-        <div style={{ fontWeight: 700 }}>Room not found</div>
-      </Centered>
-    );
+    return <SentHome message="This room isn't yours to host any more" />;
   }
   if (userId && room.host_id !== userId) {
-    return (
-      <Centered>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Only the host can see this</div>
-        <a href={`/room/${room.code}`} style={{ color: "var(--red)", fontWeight: 600 }}>
-          Go to the guest view →
-        </a>
-      </Centered>
-    );
+    return <SentHome message="You've handed over the room" />;
   }
 
   const total = roomSize(members);
@@ -696,6 +692,10 @@ function SettingsPanel({
   const [rule, setRule] = useState(skipRule);
   const [lock, setLock] = useState(ahoyLock);
   const [busy, setBusy] = useState(false);
+  const [handoffUrl, setHandoffUrl] = useState<string | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   async function save() {
     setBusy(true);
@@ -746,8 +746,114 @@ function SettingsPanel({
             {busy ? "Saving…" : "Save"}
           </button>
         </div>
+
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px dashed var(--brown)" }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>Hand the room over</div>
+          <div style={{ marginTop: 4, fontSize: 13, color: "var(--brown)", textWrap: "pretty" }}>
+            Leaving but the party isn&apos;t? Send this to whoever takes over —
+            the queue keeps playing from where it is. You&apos;ll be sent home.
+          </div>
+
+          {handoffUrl ? (
+            <>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  border: "1px solid var(--brown)",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--beige)",
+                  fontSize: 12,
+                  fontFamily: "ui-monospace, monospace",
+                  wordBreak: "break-all",
+                }}
+              >
+                {handoffUrl}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, color: "var(--red)", fontWeight: 700 }}>
+                Anyone who opens this takes the room. It works once, and expires in 30 minutes.
+              </div>
+              <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(handoffUrl).catch(() => {});
+                    setCopiedLink(true);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: "9px 16px", fontSize: 13, border: "2px solid var(--ink)" }}
+                >
+                  {copiedLink ? "Copied!" : "Copy link"}
+                </button>
+                <button
+                  onClick={async () => {
+                    setHandoffBusy(true);
+                    try {
+                      await cancelHostHandoff(roomId);
+                      setHandoffUrl(null);
+                      setCopiedLink(false);
+                    } catch (err) {
+                      setHandoffError(err instanceof Error ? err.message : "Couldn't cancel that link.");
+                    } finally {
+                      setHandoffBusy(false);
+                    }
+                  }}
+                  disabled={handoffBusy}
+                  className="btn btn-secondary"
+                  style={{ padding: "9px 16px", fontSize: 13, border: "2px solid var(--ink)" }}
+                >
+                  Cancel link
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              onClick={async () => {
+                setHandoffBusy(true);
+                setHandoffError(null);
+                try {
+                  const token = await createHostHandoff(roomId);
+                  setHandoffUrl(`${SITE_URL}/handover?token=${token}`);
+                } catch (err) {
+                  setHandoffError(err instanceof Error ? err.message : "Couldn't create a handover link.");
+                } finally {
+                  setHandoffBusy(false);
+                }
+              }}
+              disabled={handoffBusy}
+              className="btn btn-secondary"
+              style={{ marginTop: 12, padding: "10px 18px", fontSize: 14, border: "2px solid var(--ink)" }}
+            >
+              {handoffBusy ? "Creating…" : "Create handover link"}
+            </button>
+          )}
+
+          {handoffError && (
+            <div role="alert" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: "var(--red)" }}>
+              {handoffError}
+            </div>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * For a host who no longer has a room to host — usually because they just
+ * handed it over, which also removes their membership, so there is no guest
+ * view to fall back to either.
+ */
+function SentHome({ message }: { message: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    const t = setTimeout(() => router.replace("/"), 1600);
+    return () => clearTimeout(t);
+  }, [router]);
+  return (
+    <Centered>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{message}</div>
+      <div style={{ color: "var(--brown)", fontSize: 14 }}>Taking you home…</div>
+    </Centered>
   );
 }
 
