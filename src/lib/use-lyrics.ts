@@ -4,8 +4,31 @@ import { useCallback, useEffect, useState } from "react";
 import { songElapsedS } from "@/lib/format";
 import { activeLineIndex, type LyricLine, type LyricsStatus } from "@/lib/lyrics";
 
-/** Four times a second. See the ticker below for why this isn't rAF. */
-const TICK_MS = 250;
+/** Ten times a second. See the ticker below for why this isn't rAF.
+ *  A line boundary is noticed up to one tick late, so this is a straight
+ *  100ms of the lag budget; the identity bail-out means the extra ticks cost
+ *  a binary search each and no renders at all. */
+const TICK_MS = 100;
+
+/**
+ * How far ahead of the vocal a line lights up.
+ *
+ * Two jobs. The first is correcting a real error: mark_playback_started
+ * stamps audio_started_at with the server's now() when the RPC lands, but
+ * the audio began on the host's machine one network hop earlier — measured
+ * at ~150ms from Kathmandu to this project's us-east-1 database. Every
+ * client therefore computes the song as that much younger than it is, and
+ * shows the line from a moment ago.
+ *
+ * The second is that karaoke has to be early on purpose. A line that lights
+ * exactly as the words are sung gives you no time to read it, so it reads as
+ * late even when the clock is perfect. Netting the correction off, this
+ * leaves roughly a quarter-second of genuine read-ahead.
+ *
+ * The guest's own nudge is applied on top, so anyone whose room still feels
+ * off can move it without this changing underneath them.
+ */
+const LEAD_S = 0.45;
 const NUDGE_KEY = "arko:lyric-nudge";
 const MAX_NUDGE_S = 10;
 
@@ -150,7 +173,7 @@ export function useLyrics(song: Song, roomStartedAt: string | null): LyricsState
 
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
-      const t = songElapsedS(s, roomStartedAt) - skewS + nudgeS;
+      const t = songElapsedS(s, roomStartedAt) - skewS + nudgeS + LEAD_S;
       // Writing the same value back makes React bail out of the render
       // entirely. That's what pays for a 4Hz tick: a line lasts two to four
       // seconds, so nearly every tick costs one binary search and no render.
