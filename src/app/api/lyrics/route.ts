@@ -149,6 +149,7 @@ async function resolve(
     rawTitle: title,
     track: clean.track,
     artist: clean.artist,
+    artistConfident: clean.artistConfident,
     durationS,
   };
 

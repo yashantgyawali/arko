@@ -27,6 +27,8 @@ export type MatchTarget = {
   rawTitle: string;  // the untouched YouTube title
   track: string;     // cleanTrackQuery(...).track
   artist: string;    // cleanTrackQuery(...).artist
+  /** Whether `artist` came from somewhere trustworthy — see CleanQuery. */
+  artistConfident: boolean;
   durationS: number; // queue_items.duration_s
 };
 
@@ -187,7 +189,17 @@ const CHANNEL_SUFFIX = /\s*-\s*Topic$|VEVO$|\s+(Official|Music|Records?|TV|Chann
 // artist, and searching for it matches everything and nothing.
 const NOT_AN_ARTIST = /^(?:youtube|various(?: artists)?|va|unknown|topic)$/i;
 
-export type CleanQuery = { track: string; artist: string };
+export type CleanQuery = {
+  track: string;
+  artist: string;
+  /**
+   * True when the artist came from the title's own "Artist - Track" split or
+   * from a YouTube auto-generated "<Artist> - Topic" channel. Both name the
+   * artist directly. A bare channel name doesn't — an upload by "MUSICRAFT"
+   * says nothing about who made the song — so it stays false there.
+   */
+  artistConfident: boolean;
+};
 
 /**
  * A cleaned (track, artist) guess to search with.
@@ -222,18 +234,24 @@ export function cleanTrackQuery(title: string, artist: string): CleanQuery {
 
   t = t.replace(/[-–—•·:\s]+$/, "").replace(/\s{2,}/g, " ").trim();
 
-  return { track: t || rawTitle.trim(), artist: cleanArtist(fromTitle, String(artist ?? "")) };
+  return { track: t || rawTitle.trim(), ...cleanArtist(fromTitle, String(artist ?? "")) };
 }
 
-function cleanArtist(fromTitle: string, channel: string): string {
+function cleanArtist(fromTitle: string, channel: string): { artist: string; artistConfident: boolean } {
   // Prefer what the title claims. A cover channel ("Sophie Sings") uploading
   // "Adele - Hello" is about Adele's song; the channel name is not.
-  if (fromTitle && !NOT_AN_ARTIST.test(fromTitle)) return fromTitle;
+  if (fromTitle && !NOT_AN_ARTIST.test(fromTitle)) {
+    return { artist: fromTitle, artistConfident: true };
+  }
 
   const ch = channel.trim();
-  if (!ch || NOT_AN_ARTIST.test(ch)) return "";
+  if (!ch || NOT_AN_ARTIST.test(ch)) return { artist: "", artistConfident: false };
 
-  return (
+  // "<Artist> - Topic" is YouTube's own auto-generated per-artist channel, so
+  // the name in front of it really is the artist.
+  const isTopic = /\s*-\s*Topic$/i.test(ch);
+
+  const cleaned = (
     ch
       .replace(CHANNEL_SUFFIX, "")
       // "MarkRonsonVEVO" -> "MarkRonson" -> "Mark Ronson". VEVO channels are
@@ -245,13 +263,30 @@ function cleanArtist(fromTitle: string, channel: string): string {
       .replace(/\s{2,}/g, " ")
       .trim()
   );
+  return { artist: cleaned, artistConfident: isTopic && cleaned.length > 0 };
 }
 
 /* --------------------------------------------------------------- scoring --- */
 
 /** Below this we show nothing. Wrong lyrics are worse than no lyrics. */
 export const MIN_SCORE = 70;
-const MIN_SIMILARITY = 0.3;
+
+/**
+ * The title has to actually look like the same song.
+ *
+ * This floor exists because of a real miss: "Murder Mountain" by Srijana
+ * matched "Murder at the 18th St. Garage" by The Mountain Goats, which is
+ * 172s against our 173s. Two words in common and a one-second coincidence
+ * were enough. The title similarity there is 0.29, so a floor catches it
+ * while leaving genuine matches (0.85+) untouched.
+ */
+const MIN_TRACK_SIM = 0.35;
+
+/** Docked when a trustworthy artist disagrees. A deduction rather than a
+ *  veto: lyric-video uploads are filed under the uploader ("Hade Music" for
+ *  a Taylor Swift song) and are often the best-timed entry there is, so a
+ *  very strong title match is still allowed to carry a mismatched artist. */
+const ARTIST_MISMATCH_PENALTY = 35;
 
 /** Past this gap the timings visibly drift by the last chorus, so the entry's
  *  words are still worth showing but its timestamps are not. */
@@ -260,7 +295,12 @@ const SYNC_TOLERANCE_S = 15;
 /**
  * How good a match a candidate is for the song actually playing.
  *
- * Three signals, weighted by what they're worth:
+ * Title and artist are compared separately and never pooled into one bag of
+ * words. Pooling them is what let "Mountain" in "The Mountain Goats" satisfy
+ * "Murder Mountain" — the candidate's artist was quietly answering for the
+ * title. They are different questions and get asked separately.
+ *
+ * Beyond that, three signals weighted by what they're worth:
  *
  *  - Has synced lyrics. Dominant, because a plain entry can't drive karaoke
  *    at all, so it must never outrank a timed one.
@@ -269,18 +309,20 @@ const SYNC_TOLERANCE_S = 15;
  *    video's* is direct evidence the timestamps fit the audio this room is
  *    hearing. The clean album cut, six seconds shorter, is the same song with
  *    worse sync.
- *  - Title/artist similarity, with a floor. Without it any track of roughly
- *    the right length scores well.
+ *  - Title and artist agreement, the title with a hard floor under it.
  */
 export function scoreCandidate(c: LrclibCandidate, want: MatchTarget): number {
   if (!c.syncedLyrics && !c.plainLyrics) return -Infinity;
 
-  const hay = `${c.trackName} ${c.artistName}`;
-  const sim = Math.max(
-    similarity(hay, want.rawTitle),
-    similarity(hay, `${want.track} ${want.artist}`),
+  // Against the raw title as well as the cleaned track, because a good share
+  // of entries are filed under the raw YouTube title verbatim.
+  const trackSim = Math.max(
+    similarity(c.trackName, want.rawTitle),
+    similarity(c.trackName, want.track),
   );
-  if (sim < MIN_SIMILARITY) return -Infinity;
+  if (trackSim < MIN_TRACK_SIM) return -Infinity;
+
+  const artistSim = want.artist ? similarity(c.artistName, want.artist) : 0;
 
   let score = c.syncedLyrics ? 100 : 0;
 
@@ -293,7 +335,13 @@ export function scoreCandidate(c: LrclibCandidate, want: MatchTarget): number {
   else if (dd <= 20) score += 5;
   else score -= 30;
 
-  return score + Math.round(sim * 40);
+  score += Math.round(trackSim * 40);
+  score += Math.round(artistSim * 25);
+  if (want.artistConfident && want.artist && artistSim === 0) {
+    score -= ARTIST_MISMATCH_PENALTY;
+  }
+
+  return score;
 }
 
 export type Match = { best: LrclibCandidate | null; status: LyricsStatus };
@@ -325,7 +373,7 @@ export function pickBest(candidates: LrclibCandidate[], want: MatchTarget): Matc
   const instrumental = candidates.some(
     (c) =>
       c.instrumental &&
-      similarity(`${c.trackName} ${c.artistName}`, want.rawTitle) >= 0.5 &&
+      Math.max(similarity(c.trackName, want.rawTitle), similarity(c.trackName, want.track)) >= 0.5 &&
       Math.abs((c.duration ?? 0) - want.durationS) <= 10,
   );
   return { best: null, status: instrumental ? "instrumental" : "none" };
