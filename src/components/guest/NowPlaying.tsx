@@ -6,6 +6,7 @@ import { voteCounts } from "@/lib/derive";
 import { mmss, roomSize, threshold, thumb, thumbHi, type SkipRule } from "@/lib/format";
 import { VoteMeter } from "@/components/VoteMeter";
 import { Logo } from "@/components/Logo";
+import { LyricsTicker } from "@/components/guest/LyricsTicker";
 
 export function NowPlaying() {
   const { room, members, votes, myMember, nowPlaying, elapsedS, isPaused } = useRoomContext();
@@ -95,11 +96,13 @@ export function NowPlaying() {
             style={{
               position: "absolute",
               inset: 0,
-              background: "linear-gradient(to top, rgba(19,13,1,.94), rgba(19,13,1,.25) 48%, rgba(19,13,1,0) 72%)",
+              background:
+                "linear-gradient(to top, rgba(19,13,1,.95), rgba(19,13,1,.58) 44%, rgba(19,13,1,.14) 78%, rgba(19,13,1,0) 93%)",
             }}
           />
 
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "18px 18px 16px" }}>
+            <LyricsTicker />
             {locked && (
               <span
                 style={{

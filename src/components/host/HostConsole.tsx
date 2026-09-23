@@ -23,6 +23,7 @@ import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
 import { Logo } from "@/components/Logo";
 import { InviteQr } from "@/components/host/InviteQr";
+import { LyricsPanel } from "@/components/host/LyricsPanel";
 
 const RULES: SkipRule[] = ["majority", "two_thirds", "anyone"];
 
@@ -448,6 +449,8 @@ export function HostConsole() {
                 )}
               </div>
             </div>
+
+            <LyricsPanel />
 
             <div id="queue" style={{ marginTop: 26, display: "flex", alignItems: "baseline", justifyContent: "space-between", scrollMarginTop: 16 }}>
               <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.03em" }}>Up next</span>

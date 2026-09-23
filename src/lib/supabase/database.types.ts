@@ -12,6 +12,34 @@ export type Database = {
   }
   public: {
     Tables: {
+      lyrics_cache: {
+        Row: {
+          artist_name: string | null
+          checked_at: string
+          created_at: string
+          lrclib_duration: number | null
+          lrclib_id: number | null
+          plain_lyrics: string | null
+          status: string
+          synced_lyrics: string | null
+          track_name: string | null
+          video_id: string
+        }
+        Insert: {
+          artist_name?: string | null
+          checked_at?: string
+          created_at?: string
+          lrclib_duration?: number | null
+          lrclib_id?: number | null
+          plain_lyrics?: string | null
+          status?: string
+          synced_lyrics?: string | null
+          track_name?: string | null
+          video_id: string
+        }
+        Update: Partial<Database["public"]["Tables"]["lyrics_cache"]["Insert"]>
+        Relationships: []
+      }
       members: {
         Row: {
           display_name: string
