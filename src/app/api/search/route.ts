@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { demoDefaultResults, demoSearch, guideTracks, type Track } from "@/lib/catalog";
+import { curatedPool, demoDefaultResults, demoSearch, type Track } from "@/lib/catalog";
 
 export const runtime = "nodejs";
 
@@ -186,22 +186,163 @@ function parseClockDuration(text: string): number {
   return parts.reduceRight((total, part, i, arr) => total + part * Math.pow(60, arr.length - 1 - i), 0);
 }
 
+/* ------------------------------------------------- daily recommendations --- */
+
+/**
+ * Home first, then one other place each day.
+ *
+ * The rooms this runs in are in Kathmandu, so NP is always half the list —
+ * it's where the night's actual singalongs come from. The second slot
+ * rotates so the other half is somewhere new every day, which is the whole
+ * point of the tab: something unfamiliar to argue about.
+ */
+const HOME_REGION = "NP";
+const VISITING_REGIONS = ["IN", "US", "KR", "GB", "JP", "BR", "MX", "ID", "DE", "FR", "CA", "AU"];
+
+/**
+ * The day, in UTC.
+ *
+ * UTC on purpose rather than Kathmandu local: the list changes when this
+ * flips, and 00:00 UTC is 05:45 in Kathmandu — nobody is mid-party. Local
+ * midnight would swap the recommendations out from under a room at exactly
+ * the moment it's busiest.
+ */
+function dayKey(now = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
+function dayNumber(key: string): number {
+  return Math.floor(Date.parse(`${key}T00:00:00Z`) / 86_400_000);
+}
+
+/** Small seeded PRNG. The shuffle has to be identical for everyone in a room
+ *  and stable across the day, so it can't come from Math.random(). */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(items: T[], seed: number): T[] {
+  const out = [...items];
+  const rand = mulberry32(seed);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Alternate between the lists so the first screenful is already mixed,
+ *  rather than all of one place followed by all of the other. */
+function interleave(a: Track[], b: Track[]): Track[] {
+  const out: Track[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i]) out.push(a[i]);
+    if (b[i]) out.push(b[i]);
+  }
+  return out;
+}
+
+/**
+ * YouTube's own most-popular music chart for a region.
+ *
+ * videos.list costs 1 quota unit per call whatever maxResults says, against
+ * the 100 that a single search.list burns — so the whole day's
+ * recommendations cost 2 units, once, for every room. Asking for `status`
+ * too is free and lets us drop anything that can't be embedded, which the
+ * scrape path has no way to check.
+ */
+async function trendingMusic(regionCode: string, apiKey: string): Promise<Track[]> {
+  const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+  url.searchParams.set("part", "snippet,contentDetails,status");
+  url.searchParams.set("chart", "mostPopular");
+  url.searchParams.set("videoCategoryId", "10"); // Music
+  url.searchParams.set("regionCode", regionCode);
+  url.searchParams.set("maxResults", "50");
+  url.searchParams.set("key", apiKey);
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`videos.list chart failed for ${regionCode}: ${res.status}`);
+  const json = await res.json();
+
+  type ChartItem = {
+    id: string;
+    snippet: { title: string; channelTitle: string; thumbnails?: { medium?: { url: string } } };
+    contentDetails: { duration: string };
+    status?: { embeddable?: boolean };
+  };
+  return (json.items ?? [])
+    .filter((v: ChartItem) => v.status?.embeddable !== false)
+    .map((v: ChartItem) => ({
+      videoId: v.id,
+      title: v.snippet.title,
+      artist: v.snippet.channelTitle,
+      durationS: parseIsoDuration(v.contentDetails.duration),
+      thumbUrl: v.snippet.thumbnails?.medium?.url ?? `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`,
+    }))
+    .filter((t: Track) => isReasonableLength(t.durationS));
+}
+
+const DAILY_LIMIT = 24;
+
+async function dailyPicks(apiKey: string | undefined, key: string): Promise<{ results: Track[]; source: string }> {
+  const seed = dayNumber(key);
+
+  if (apiKey) {
+    const visiting = VISITING_REGIONS[((seed % VISITING_REGIONS.length) + VISITING_REGIONS.length) % VISITING_REGIONS.length];
+    const [home, away] = await Promise.allSettled([
+      trendingMusic(HOME_REGION, apiKey),
+      trendingMusic(visiting, apiKey),
+    ]);
+    const homeTracks = home.status === "fulfilled" ? home.value : [];
+    const awayTracks = away.status === "fulfilled" ? away.value : [];
+    if (home.status === "rejected") console.error("daily: home chart failed:", home.reason);
+    if (away.status === "rejected") console.error("daily: visiting chart failed:", away.reason);
+
+    // Shuffle each side before interleaving, so it isn't the same top ten in
+    // the same order every day that the chart barely moves.
+    const merged = interleave(shuffled(homeTracks, seed), shuffled(awayTracks, seed + 1));
+    const seen = new Set<string>();
+    const picks = merged.filter((t) => !seen.has(t.videoId) && seen.add(t.videoId)).slice(0, DAILY_LIMIT);
+    if (picks.length > 0) return { results: picks, source: `youtube-chart:${HOME_REGION}+${visiting}` };
+  }
+
+  // No key, or both charts unreachable. Still real, playable songs.
+  return { results: shuffled(curatedPool(), seed).slice(0, DAILY_LIMIT), source: "curated" };
+}
+
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
-  const guide = req.nextUrl.searchParams.get("guide")?.trim() ?? "";
+  const daily = req.nextUrl.searchParams.get("daily") === "1";
   const apiKey = process.env.YOUTUBE_API_KEY;
 
-  if (!q && !guide) {
+  if (!q && !daily) {
     return NextResponse.json({ results: demoDefaultResults().filter((t) => isReasonableLength(t.durationS)), source: "demo" });
   }
 
-  // Guide pills are a fixed, curated list, not a free-text query — see
-  // GUIDE_CATALOG in src/lib/catalog.ts for why this never touches YouTube's
-  // API at all (id, title, artist, and duration are pre-verified and
-  // hardcoded). This branch runs identically with or without an API key,
-  // and regardless of whether the search quota is exhausted for the day.
-  if (guide) {
-    return NextResponse.json({ results: guideTracks(guide), source: "curated" });
+  // One row per day, shared by everyone: the first person to open the tab
+  // after midnight UTC pays the two quota units, and the rest of the world
+  // reads the same list out of Postgres.
+  if (daily) {
+    const key = `daily:${dayKey()}`;
+    const db = serviceClient();
+    if (db) {
+      const { data: cached } = await db.from("search_cache").select("results").eq("query", key).maybeSingle();
+      if (cached) return NextResponse.json({ results: cached.results as Track[], source: "cache" });
+    }
+    try {
+      const { results, source } = await dailyPicks(apiKey, dayKey());
+      if (db && results.length > 0) await db.from("search_cache").upsert({ query: key, results });
+      return NextResponse.json({ results, source });
+    } catch (err) {
+      console.error("dailyPicks failed, falling back to the curated pool:", err);
+      return NextResponse.json({ results: shuffled(curatedPool(), dayNumber(dayKey())).slice(0, DAILY_LIMIT), source: "curated-fallback" });
+    }
   }
 
   const cacheKey = q.toLowerCase();
