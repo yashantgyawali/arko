@@ -227,14 +227,42 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function shuffled<T>(items: T[], seed: number): T[] {
-  const out = [...items];
+/**
+ * How much we want to suggest a song of this length.
+ *
+ * A recommendation is a nudge, and nudging a room toward a ten-minute track
+ * costs everyone ten minutes. The cap stays at MAX_SONG_DURATION_S — anyone
+ * can still search a long song out and queue it deliberately — this only
+ * shapes what gets offered unprompted.
+ *
+ * Weights rather than a shorter cutoff, because a hard limit would throw out
+ * real favourites: Dhairya is 6:34 and the Narayan Gopal classics run past
+ * seven minutes. Those should turn up now and then, just not as often as a
+ * three-minute single.
+ */
+function lengthWeight(durationS: number): number {
+  if (durationS < 150) return 0.5; // under 2:30 — often an edit, intro or snippet
+  if (durationS <= 300) return 1; // 2:30-5:00 — where most singles sit
+  if (durationS <= 390) return 0.5; // 5:00-6:30
+  if (durationS <= 480) return 0.2; // 6:30-8:00
+  return 0.08; // 8:00-10:00 — rare, not banned
+}
+
+/**
+ * Shuffle, but with a thumb on the scale for shorter songs.
+ *
+ * Efraimidis-Spirakis: give each item a key of random^(1/weight) and sort
+ * descending. A heavier weight pulls the key toward 1, so it tends to land
+ * near the front — while every item keeps a real chance, which is what stops
+ * the tab showing the same handful of three-minute songs every day.
+ * Deterministic, because the seed is the date.
+ */
+function weightedOrder(tracks: Track[], seed: number): Track[] {
   const rand = mulberry32(seed);
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
+  return tracks
+    .map((t) => ({ t, key: Math.pow(rand(), 1 / lengthWeight(t.durationS)) }))
+    .sort((a, b) => b.key - a.key)
+    .map((x) => x.t);
 }
 
 /** Alternate between the lists so the first screenful is already mixed,
@@ -304,16 +332,16 @@ async function dailyPicks(apiKey: string | undefined, key: string): Promise<{ re
     if (home.status === "rejected") console.error("daily: home chart failed:", home.reason);
     if (away.status === "rejected") console.error("daily: visiting chart failed:", away.reason);
 
-    // Shuffle each side before interleaving, so it isn't the same top ten in
+    // Order each side before interleaving, so it isn't the same top ten in
     // the same order every day that the chart barely moves.
-    const merged = interleave(shuffled(homeTracks, seed), shuffled(awayTracks, seed + 1));
+    const merged = interleave(weightedOrder(homeTracks, seed), weightedOrder(awayTracks, seed + 1));
     const seen = new Set<string>();
     const picks = merged.filter((t) => !seen.has(t.videoId) && seen.add(t.videoId)).slice(0, DAILY_LIMIT);
     if (picks.length > 0) return { results: picks, source: `youtube-chart:${HOME_REGION}+${visiting}` };
   }
 
   // No key, or both charts unreachable. Still real, playable songs.
-  return { results: shuffled(curatedPool(), seed).slice(0, DAILY_LIMIT), source: "curated" };
+  return { results: weightedOrder(curatedPool(), seed).slice(0, DAILY_LIMIT), source: "curated" };
 }
 
 export async function GET(req: NextRequest) {
@@ -341,7 +369,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ results, source });
     } catch (err) {
       console.error("dailyPicks failed, falling back to the curated pool:", err);
-      return NextResponse.json({ results: shuffled(curatedPool(), dayNumber(dayKey())).slice(0, DAILY_LIMIT), source: "curated-fallback" });
+      return NextResponse.json({ results: weightedOrder(curatedPool(), dayNumber(dayKey())).slice(0, DAILY_LIMIT), source: "curated-fallback" });
     }
   }
 
