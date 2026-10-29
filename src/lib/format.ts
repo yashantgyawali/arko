@@ -47,6 +47,16 @@ export function initial(name: string): string {
  * kept in sync with the same exclusion so the UI and actual vote resolution
  * never disagree about who counts.
  */
+/**
+ * Below this many guests, an Ahoy majority can't lock a song in.
+ *
+ * The skip threshold scales with the room, which is right for skipping and
+ * wrong for locking: at one guest the majority is 1, so the first person
+ * through the door could keep a song nobody else had heard. Mirrored by
+ * resolve_lock() in Postgres, which is what actually enforces it.
+ */
+export const MIN_LOCK_MEMBERS = 4;
+
 export function roomSize(members: { is_host: boolean }[]): number {
   return members.filter((m) => !m.is_host).length;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
-import { initial, roomSize, threshold, type SkipRule } from "@/lib/format";
+import { MIN_LOCK_MEMBERS, initial, roomSize, threshold, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
 
 const CARD_BG = "var(--paper)";
@@ -186,9 +186,11 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <div style={{ width: 22, height: 22, borderRadius: 999, background: "var(--red)", flex: "none" }} />
               <div style={{ fontSize: 14 }}>
-                {room.ahoy_lock
-                  ? `${th} Ahoys locks the song in. No more skipping it.`
-                  : "Ahoy is a vote of confidence. It cannot lock a song in."}
+                {!room.ahoy_lock
+                  ? "Ahoy is a vote of confidence. It cannot lock a song in."
+                  : total < MIN_LOCK_MEMBERS
+                    ? `Ahoy is a vote of confidence. It takes ${MIN_LOCK_MEMBERS} in the room before it can lock a song in.`
+                    : `${th} Ahoys locks the song in. No more skipping it.`}
               </div>
             </div>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>

@@ -17,7 +17,7 @@ import {
   updateRoomSettings,
 } from "@/lib/actions";
 import { voteCounts } from "@/lib/derive";
-import { SITE_URL, initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, songElapsedS, threshold, thumb, type SkipRule } from "@/lib/format";
+import { MIN_LOCK_MEMBERS, SITE_URL, initial, inviteLink, mmss, relativeTime, roomSize, ruleHelp, ruleLabel, songElapsedS, threshold, thumb, type SkipRule } from "@/lib/format";
 import { STALLED, useYouTubePlayer } from "@/lib/use-youtube-player";
 import { VoteMeter } from "@/components/VoteMeter";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
@@ -740,6 +740,10 @@ function SettingsPanel({
           <input type="checkbox" checked={lock} onChange={(e) => setLock(e.target.checked)} />
           Ahoy can lock a song in
         </label>
+        <div style={{ marginTop: 6, fontSize: 13, color: "var(--brown)" }}>
+          Only once {MIN_LOCK_MEMBERS} people have joined — below that an Ahoy majority is one or
+          two people deciding for everyone.
+        </div>
 
         <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
           <button onClick={onClose} className="btn btn-secondary" style={{ padding: "10px 20px", fontSize: 14, border: "2px solid var(--ink)" }}>
