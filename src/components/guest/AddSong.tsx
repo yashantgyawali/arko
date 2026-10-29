@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
-import { addToQueue } from "@/lib/actions";
+import { addToQueue, songHistory, type HistorySong } from "@/lib/actions";
 import { mmss, thumb } from "@/lib/format";
 import { getSavedPlaylist, saveTrackToPlaylist } from "@/lib/saved-playlist";
 import type { Track } from "@/lib/catalog";
 
-type Tab = "recommended" | "playlist";
+type Tab = "recommended" | "history" | "playlist";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "recommended", label: "Recommended" },
+  { key: "history", label: "Hall of fame" },
   { key: "playlist", label: "My playlist" },
 ];
 
@@ -21,6 +22,11 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
   const [results, setResults] = useState<Track[]>([]);
   const [daily, setDaily] = useState<Track[]>([]);
   const [loadingDaily, setLoadingDaily] = useState(true);
+  const [history, setHistory] = useState<HistorySong[]>([]);
+  // One flag, not two: "not loaded yet" is the same thing as "loading", and
+  // marking it loaded even on failure is what stops a dead request spinning
+  // forever instead of showing the empty state.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -49,7 +55,36 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
     return () => controller.abort();
   }, []);
 
+  // Fetched the first time the tab is opened rather than on mount: it's an
+  // aggregate over every song ever played, and most sessions never ask for it.
+  useEffect(() => {
+    if (tab !== "history" || historyLoaded) return;
+    let live = true;
+    songHistory()
+      .then((rows) => {
+        if (live) setHistory(rows);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (live) setHistoryLoaded(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [tab, historyLoaded]);
+
   const searching = query.trim().length > 0;
+
+  // The history rows carry their own vote tallies, but everything below this
+  // renders a plain Track, so flatten once here.
+  const historyTracks: Track[] = history.map((h) => ({
+    videoId: h.videoId,
+    title: h.title,
+    artist: h.artist,
+    durationS: h.durationS,
+    thumbUrl: h.thumbUrl ?? "",
+  }));
+  const scoreOf = new Map(history.map((h) => [h.videoId, h]));
 
   useEffect(() => {
     // Nothing to reset when the box is emptied: displayResults only ever
@@ -92,13 +127,25 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
     }
   }
 
-  const displayResults = searching ? results : tab === "playlist" ? saved : daily;
-  const busy = searching ? loading : tab === "recommended" && loadingDaily;
+  const displayResults = searching
+    ? results
+    : tab === "playlist"
+      ? saved
+      : tab === "history"
+        ? historyTracks
+        : daily;
+  const busy = searching
+    ? loading
+    : tab === "history"
+      ? !historyLoaded
+      : tab === "recommended" && loadingDaily;
   const metaLabel = searching
     ? `${results.length} results for "${query.trim()}"`
     : tab === "playlist"
       ? "songs you've added before"
-      : "fresh picks, new every day";
+      : tab === "history"
+        ? "every night so far · ahoys minus neins"
+        : "fresh picks, new every day";
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", animation: "nFade 300ms ease" }}>
@@ -163,9 +210,12 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
                   flex: 1,
                   minHeight: 44,
                   borderRadius: 999,
-                  padding: "9px 18px",
-                  fontSize: 14,
+                  // Tight enough that three labels each stay on one line at
+                  // 375px — "Hall of fame" wrapped and made the row ragged.
+                  padding: "9px 6px",
+                  fontSize: 13,
                   fontWeight: 700,
+                  whiteSpace: "nowrap",
                   border: `1px solid ${on ? "var(--ink)" : "var(--brown)"}`,
                   background: on ? "var(--ink)" : "var(--paper)",
                   color: on ? "var(--beige)" : "var(--ink)",
@@ -219,6 +269,15 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
                   <div style={{ fontSize: 13, color: "var(--brown)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {r.artist} · {mmss(r.durationS)}
                   </div>
+                  {tab === "history" && !searching && scoreOf.get(r.videoId) && (
+                    <div style={{ marginTop: 2, fontSize: 12, fontWeight: 700, color: "var(--brown)" }}>
+                      <span style={{ color: "var(--red)" }}>{scoreOf.get(r.videoId)!.ahoys} ahoy</span>
+                      {" · "}
+                      {scoreOf.get(r.videoId)!.neins} nein
+                      {" · kept "}
+                      {scoreOf.get(r.videoId)!.timesKept}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => !inQueue && add(r)}
@@ -249,7 +308,9 @@ export function AddSong({ onAdded }: { onAdded: (track: Track) => void }) {
                 ? "No results. Try a different search."
                 : tab === "playlist"
                   ? "Nothing saved yet — songs you add will show up here next time."
-                  : "Couldn't reach today's picks. Search for something instead."}
+                  : tab === "history"
+                    ? "Nothing's been played yet. Give it a night."
+                    : "Couldn't reach today's picks. Search for something instead."}
             </div>
           )}
         </div>

@@ -159,12 +159,50 @@ export async function updateRoomSettings(
   roomId: string,
   skipRule: SkipRule,
   ahoyLock: boolean,
+  autoFill: boolean,
 ) {
   const { data, error } = await supabase.rpc("update_room_settings", {
     p_room_id: roomId,
     p_skip_rule: skipRule,
     p_ahoy_lock: ahoyLock,
+    p_auto_fill: autoFill,
   });
   if (error) throw error;
   return data;
+}
+
+export type HistorySong = {
+  videoId: string;
+  title: string;
+  artist: string;
+  durationS: number;
+  thumbUrl: string | null;
+  ahoys: number;
+  neins: number;
+  score: number;
+  timesKept: number;
+  timesSkipped: number;
+};
+
+/**
+ * Every song the app has finished, best-loved first.
+ *
+ * Deliberately across all rooms: a night is a room, and the point of a
+ * history is that it outlives the night.
+ */
+export async function songHistory(limit = 200): Promise<HistorySong[]> {
+  const { data, error } = await supabase.rpc("song_history", { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    videoId: r.video_id,
+    title: r.title,
+    artist: r.artist,
+    durationS: r.duration_s,
+    thumbUrl: r.thumb_url,
+    ahoys: r.ahoys,
+    neins: r.neins,
+    score: r.score,
+    timesKept: r.times_kept,
+    timesSkipped: r.times_skipped,
+  }));
 }

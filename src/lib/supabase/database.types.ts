@@ -125,6 +125,7 @@ export type Database = {
           retired_at: string | null
           handoff_token: string | null
           handoff_created_at: string | null
+          auto_fill: boolean
         }
         Insert: {
           ahoy_lock?: boolean
@@ -142,6 +143,7 @@ export type Database = {
           retired_at?: string | null
           handoff_token?: string | null
           handoff_created_at?: string | null
+          auto_fill?: boolean
         }
         Update: Partial<Database["public"]["Tables"]["rooms"]["Insert"]>
         Relationships: []
@@ -239,8 +241,29 @@ export type Database = {
         Args: { p_member_id: string; p_room_id: string }
         Returns: undefined
       }
+      song_history: {
+        Args: { p_limit?: number }
+        Returns: {
+          video_id: string
+          title: string
+          artist: string
+          duration_s: number
+          thumb_url: string | null
+          ahoys: number
+          neins: number
+          score: number
+          times_kept: number
+          times_skipped: number
+          last_played: string
+        }[]
+      }
       update_room_settings: {
-        Args: { p_ahoy_lock: boolean; p_room_id: string; p_skip_rule: string }
+        Args: {
+          p_ahoy_lock: boolean
+          p_room_id: string
+          p_skip_rule: string
+          p_auto_fill?: boolean
+        }
         Returns: Database["public"]["Tables"]["rooms"]["Row"]
       }
     }

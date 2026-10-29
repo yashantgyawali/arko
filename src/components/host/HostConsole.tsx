@@ -564,6 +564,7 @@ export function HostConsole() {
           roomId={room.id}
           skipRule={rule}
           ahoyLock={room.ahoy_lock}
+          autoFillOn={room.auto_fill}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -685,15 +686,18 @@ function SettingsPanel({
   roomId,
   skipRule,
   ahoyLock,
+  autoFillOn,
   onClose,
 }: {
   roomId: string;
   skipRule: SkipRule;
   ahoyLock: boolean;
+  autoFillOn: boolean;
   onClose: () => void;
 }) {
   const [rule, setRule] = useState(skipRule);
   const [lock, setLock] = useState(ahoyLock);
+  const [autoFill, setAutoFill] = useState(autoFillOn);
   const [busy, setBusy] = useState(false);
   const [handoffUrl, setHandoffUrl] = useState<string | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
@@ -703,7 +707,7 @@ function SettingsPanel({
   async function save() {
     setBusy(true);
     try {
-      await updateRoomSettings(roomId, rule, lock);
+      await updateRoomSettings(roomId, rule, lock, autoFill);
       onClose();
     } catch (err) {
       console.error(err);
@@ -743,6 +747,15 @@ function SettingsPanel({
         <div style={{ marginTop: 6, fontSize: 13, color: "var(--brown)" }}>
           Only once {MIN_LOCK_MEMBERS} people have joined — below that an Ahoy majority is one or
           two people deciding for everyone.
+        </div>
+
+        <label style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+          <input type="checkbox" checked={autoFill} onChange={(e) => setAutoFill(e.target.checked)} />
+          Keep playing when the queue runs out
+        </label>
+        <div style={{ marginTop: 6, fontSize: 13, color: "var(--brown)" }}>
+          Puts on something the room has loved before. Anything anyone queues still
+          goes first — this only fills silence.
         </div>
 
         <div style={{ marginTop: 24, display: "flex", gap: 12, justifyContent: "flex-end" }}>
