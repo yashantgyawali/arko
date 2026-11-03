@@ -2,15 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
-import { MIN_LOCK_MEMBERS, initial, roomSize, threshold, type SkipRule } from "@/lib/format";
+import { MIN_LOCK_MEMBERS, initial, mmss, roomSize, threshold, thumb, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
+import { removeFromQueue } from "@/lib/actions";
 
 const CARD_BG = "var(--paper)";
 const CARD_BORDER = "var(--brown)";
 const MUTED = "var(--brown)";
 
 export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: () => void }) {
-  const { room, members, myMember } = useRoomContext();
+  const { room, members, myMember, queued } = useRoomContext();
+  // `queued` is already in play order, so an item's index is its real place in
+  // the line — not just its position among this person's own songs.
+  const mine = queued
+    .map((q, i) => ({ q, place: i + 1 }))
+    .filter(({ q }) => myMember && q.added_by === myMember.id);
+  const [removing, setRemoving] = useState<string | null>(null);
   // The host never votes or gets scored — showing up in this leaderboard
   // would read as the host competing in their own room.
   const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
@@ -77,7 +84,76 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
           </span>
         </button>
 
-        <div style={{ marginTop: 26, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22 }}>Best taste</div>
+        <div style={{ marginTop: 26, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22 }}>Your songs</span>
+          <span style={{ fontSize: 13, color: MUTED }}>
+            {mine.length === 0 ? "" : `${mine.length} waiting`}
+          </span>
+        </div>
+        <div style={{ marginTop: 3, fontSize: 13, color: MUTED }}>
+          Still to play. Take one back out if you change your mind.
+        </div>
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          {mine.length === 0 && (
+            <div style={{ fontSize: 14, color: MUTED, padding: "4px 2px" }}>
+              Nothing of yours in the queue. Go add something.
+            </div>
+          )}
+          {mine.map(({ q, place }) => (
+            <div
+              key={q.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 11,
+                padding: 9,
+                border: `1px solid ${CARD_BORDER}`,
+                borderRadius: "var(--radius-md)",
+                background: CARD_BG,
+                opacity: removing === q.id ? 0.45 : 1,
+              }}
+            >
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: MUTED, minWidth: 18, textAlign: "right" }}>
+                {place}
+              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={q.thumb_url || thumb(q.video_id)}
+                alt=""
+                style={{ width: 46, height: 46, borderRadius: "var(--radius-sm)", objectFit: "cover", flex: "none", border: `1px solid ${CARD_BORDER}` }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {q.title}
+                </div>
+                <div style={{ fontSize: 12, color: MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {q.artist} · {mmss(q.duration_s)}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (removing) return;
+                  setRemoving(q.id);
+                  // No optimistic removal: realtime deletes the row for
+                  // everyone a moment later, and dropping it here first would
+                  // make a failure look like a success.
+                  removeFromQueue(room.id, q.id)
+                    .catch(console.error)
+                    .finally(() => setRemoving(null));
+                }}
+                disabled={removing === q.id}
+                aria-label={`Take ${q.title} out of the queue`}
+                title="Take out of the queue"
+                className="icon-remove"
+                style={{ width: 34, height: 34, fontSize: 16, lineHeight: 1, flex: "none" }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 28, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22 }}>Best taste</div>
         <div style={{ marginTop: 3, fontSize: 13, color: MUTED }}>Points for every song of yours the room keeps.</div>
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           {ranked.length === 0 && (
