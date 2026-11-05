@@ -272,6 +272,27 @@ button:focus-visible {
   color: var(--paper);
   border-color: var(--red);
 }
+/* Reordering isn't destructive, so it gets the ink hover rather than the red
+   one that warns you about the x next to it. */
+.icon-move {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--brown);
+  background: transparent;
+  color: var(--brown);
+  line-height: 1;
+  padding: 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.icon-move:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.icon-move:disabled {
+  cursor: default;
+  opacity: 0.28;
+}
 .nav-item {
   display: flex;
   align-items: center;

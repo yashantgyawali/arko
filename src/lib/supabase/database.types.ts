@@ -233,6 +233,10 @@ export type Database = {
         Args: { p_room_id: string; p_queue_item_id: string }
         Returns: undefined
       }
+      move_queue_item: {
+        Args: { p_direction: string; p_queue_item_id: string; p_room_id: string }
+        Returns: undefined
+      }
       remove_from_queue: {
         Args: { p_queue_item_id: string; p_room_id: string }
         Returns: undefined

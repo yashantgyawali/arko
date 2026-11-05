@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
 import { MIN_LOCK_MEMBERS, initial, mmss, roomSize, threshold, thumb, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
-import { removeFromQueue } from "@/lib/actions";
+import { moveInQueue, removeFromQueue } from "@/lib/actions";
 
 const CARD_BG = "var(--paper)";
 const CARD_BORDER = "var(--brown)";
@@ -17,7 +17,20 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
   const mine = queued
     .map((q, i) => ({ q, place: i + 1 }))
     .filter(({ q }) => myMember && q.added_by === myMember.id);
-  const [removing, setRemoving] = useState<string | null>(null);
+  // One id at a time: every one of these is a write that realtime echoes back,
+  // and letting a second tap land before the first echo arrives would reorder
+  // against a list that is already stale.
+  const [busy, setBusy] = useState<string | null>(null);
+  // Takes a thunk, not a promise, so a tap that loses the guard never fires
+  // the call at all.
+  const run = (id: string, fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(id);
+    // No optimistic reorder: realtime moves the row for everyone a moment
+    // later, and shifting it here first would make a failure look like it
+    // worked and then silently snap back.
+    fn().catch(console.error).finally(() => setBusy(null));
+  };
   // The host never votes or gets scored — showing up in this leaderboard
   // would read as the host competing in their own room.
   const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
@@ -91,7 +104,7 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
           </span>
         </div>
         <div style={{ marginTop: 3, fontSize: 13, color: MUTED }}>
-          Still to play. Take one back out if you change your mind.
+          Still to play. Shuffle your own picks around, or take one back out.
         </div>
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           {mine.length === 0 && (
@@ -99,7 +112,7 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
               Nothing of yours in the queue. Go add something.
             </div>
           )}
-          {mine.map(({ q, place }) => (
+          {mine.map(({ q, place }, i) => (
             <div
               key={q.id}
               style={{
@@ -110,12 +123,37 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
                 border: `1px solid ${CARD_BORDER}`,
                 borderRadius: "var(--radius-md)",
                 background: CARD_BG,
-                opacity: removing === q.id ? 0.45 : 1,
+                opacity: busy === q.id ? 0.45 : 1,
               }}
             >
-              <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: MUTED, minWidth: 18, textAlign: "right" }}>
-                {place}
-              </span>
+              {/* The place sits between the two arrows, because it is the
+                  thing they change: moving up swaps this number with the one
+                  above it. */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flex: "none" }}>
+                <button
+                  onClick={() => run(q.id, () => moveInQueue(room.id, q.id, "up"))}
+                  disabled={!!busy || i === 0}
+                  aria-label={`Move ${q.title} up`}
+                  title="Move up"
+                  className="icon-move"
+                  style={{ width: 28, height: 24, fontSize: 10 }}
+                >
+                  ▲
+                </button>
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: MUTED }}>
+                  {place}
+                </span>
+                <button
+                  onClick={() => run(q.id, () => moveInQueue(room.id, q.id, "down"))}
+                  disabled={!!busy || i === mine.length - 1}
+                  aria-label={`Move ${q.title} down`}
+                  title="Move down"
+                  className="icon-move"
+                  style={{ width: 28, height: 24, fontSize: 10 }}
+                >
+                  ▼
+                </button>
+              </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={q.thumb_url || thumb(q.video_id)}
@@ -131,17 +169,8 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
                 </div>
               </div>
               <button
-                onClick={() => {
-                  if (removing) return;
-                  setRemoving(q.id);
-                  // No optimistic removal: realtime deletes the row for
-                  // everyone a moment later, and dropping it here first would
-                  // make a failure look like a success.
-                  removeFromQueue(room.id, q.id)
-                    .catch(console.error)
-                    .finally(() => setRemoving(null));
-                }}
-                disabled={removing === q.id}
+                onClick={() => run(q.id, () => removeFromQueue(room.id, q.id))}
+                disabled={!!busy}
                 aria-label={`Take ${q.title} out of the queue`}
                 title="Take out of the queue"
                 className="icon-remove"

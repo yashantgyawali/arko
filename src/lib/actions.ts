@@ -68,6 +68,26 @@ export async function removeFromQueue(roomId: string, queueItemId: string) {
   if (error) throw error;
 }
 
+/**
+ * Moves one of your own queued songs a place up or down.
+ *
+ * It only ever swaps with another song of yours, so it changes which of your
+ * songs fills which of your turns in the rotation — nobody else's place in
+ * the line moves, and nobody can reorder their way to the front.
+ */
+export async function moveInQueue(
+  roomId: string,
+  queueItemId: string,
+  direction: "up" | "down",
+) {
+  const { error } = await supabase.rpc("move_queue_item", {
+    p_room_id: roomId,
+    p_queue_item_id: queueItemId,
+    p_direction: direction,
+  });
+  if (error) throw error;
+}
+
 // Leaving actually removes you, so you stop counting toward the vote
 // threshold — a guest who walked out was quietly making every song harder to
 // vote out. Songs you queued stay in the queue; your votes go with you.
