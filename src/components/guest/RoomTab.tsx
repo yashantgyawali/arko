@@ -2,35 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRoomContext } from "@/lib/room-context";
-import { MIN_LOCK_MEMBERS, initial, mmss, roomSize, threshold, thumb, type SkipRule } from "@/lib/format";
+import { MIN_LOCK_MEMBERS, initial, roomSize, threshold, type SkipRule } from "@/lib/format";
 import { bestBy, TITLES } from "@/lib/derive";
-import { moveInQueue, removeFromQueue } from "@/lib/actions";
+import { YourSongs } from "@/components/guest/YourSongs";
 
 const CARD_BG = "var(--paper)";
 const CARD_BORDER = "var(--brown)";
 const MUTED = "var(--brown)";
 
 export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: () => void }) {
-  const { room, members, myMember, queued } = useRoomContext();
-  // `queued` is already in play order, so an item's index is its real place in
-  // the line — not just its position among this person's own songs.
-  const mine = queued
-    .map((q, i) => ({ q, place: i + 1 }))
-    .filter(({ q }) => myMember && q.added_by === myMember.id);
-  // One id at a time: every one of these is a write that realtime echoes back,
-  // and letting a second tap land before the first echo arrives would reorder
-  // against a list that is already stale.
-  const [busy, setBusy] = useState<string | null>(null);
-  // Takes a thunk, not a promise, so a tap that loses the guard never fires
-  // the call at all.
-  const run = (id: string, fn: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(id);
-    // No optimistic reorder: realtime moves the row for everyone a moment
-    // later, and shifting it here first would make a failure look like it
-    // worked and then silently snap back.
-    fn().catch(console.error).finally(() => setBusy(null));
-  };
+  const { room, members, myMember } = useRoomContext();
   // The host never votes or gets scored — showing up in this leaderboard
   // would read as the host competing in their own room.
   const ranked = members.filter((m) => !m.is_host).sort((a, b) => b.points - a.points);
@@ -97,90 +78,7 @@ export function RoomTab({ onShare, onLeave }: { onShare: () => void; onLeave: ()
           </span>
         </button>
 
-        <div style={{ marginTop: 26, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22 }}>Your songs</span>
-          <span style={{ fontSize: 13, color: MUTED }}>
-            {mine.length === 0 ? "" : `${mine.length} waiting`}
-          </span>
-        </div>
-        <div style={{ marginTop: 3, fontSize: 13, color: MUTED }}>
-          Still to play. Shuffle your own picks around, or take one back out.
-        </div>
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          {mine.length === 0 && (
-            <div style={{ fontSize: 14, color: MUTED, padding: "4px 2px" }}>
-              Nothing of yours in the queue. Go add something.
-            </div>
-          )}
-          {mine.map(({ q, place }, i) => (
-            <div
-              key={q.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 11,
-                padding: 9,
-                border: `1px solid ${CARD_BORDER}`,
-                borderRadius: "var(--radius-md)",
-                background: CARD_BG,
-                opacity: busy === q.id ? 0.45 : 1,
-              }}
-            >
-              {/* The place sits between the two arrows, because it is the
-                  thing they change: moving up swaps this number with the one
-                  above it. */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flex: "none" }}>
-                <button
-                  onClick={() => run(q.id, () => moveInQueue(room.id, q.id, "up"))}
-                  disabled={!!busy || i === 0}
-                  aria-label={`Move ${q.title} up`}
-                  title="Move up"
-                  className="icon-move"
-                  style={{ width: 28, height: 24, fontSize: 10 }}
-                >
-                  ▲
-                </button>
-                <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, color: MUTED }}>
-                  {place}
-                </span>
-                <button
-                  onClick={() => run(q.id, () => moveInQueue(room.id, q.id, "down"))}
-                  disabled={!!busy || i === mine.length - 1}
-                  aria-label={`Move ${q.title} down`}
-                  title="Move down"
-                  className="icon-move"
-                  style={{ width: 28, height: 24, fontSize: 10 }}
-                >
-                  ▼
-                </button>
-              </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={q.thumb_url || thumb(q.video_id)}
-                alt=""
-                style={{ width: 46, height: 46, borderRadius: "var(--radius-sm)", objectFit: "cover", flex: "none", border: `1px solid ${CARD_BORDER}` }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {q.title}
-                </div>
-                <div style={{ fontSize: 12, color: MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {q.artist} · {mmss(q.duration_s)}
-                </div>
-              </div>
-              <button
-                onClick={() => run(q.id, () => removeFromQueue(room.id, q.id))}
-                disabled={!!busy}
-                aria-label={`Take ${q.title} out of the queue`}
-                title="Take out of the queue"
-                className="icon-remove"
-                style={{ width: 34, height: 34, fontSize: 16, lineHeight: 1, flex: "none" }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
+        <YourSongs />
 
         <div style={{ marginTop: 28, fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22 }}>Best taste</div>
         <div style={{ marginTop: 3, fontSize: 13, color: MUTED }}>Points for every song of yours the room keeps.</div>

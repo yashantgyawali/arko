@@ -272,26 +272,37 @@ button:focus-visible {
   color: var(--paper);
   border-color: var(--red);
 }
-/* Reordering isn't destructive, so it gets the ink hover rather than the red
-   one that warns you about the x next to it. */
-.icon-move {
-  cursor: pointer;
+/* Drag handle. `touch-action: none` is what makes it work on a phone: the
+   page keeps scrolling under every other part of the row, and only this
+   square hands its vertical movement to the drag instead. */
+.grip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 46px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--brown);
   background: transparent;
   color: var(--brown);
-  line-height: 1;
-  padding: 0;
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  cursor: grab;
+  touch-action: none;
+  transition: background 150ms ease, color 150ms ease;
 }
-.icon-move:hover:not(:disabled) {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
+.grip:hover:not(:disabled) {
+  background: var(--beige);
+  color: var(--ink);
 }
-.icon-move:disabled {
+.grip:active:not(:disabled) {
+  cursor: grabbing;
+  background: var(--beige);
+  color: var(--ink);
+}
+.grip:disabled {
   cursor: default;
-  opacity: 0.28;
+  opacity: 0.3;
 }
 .nav-item {
   display: flex;

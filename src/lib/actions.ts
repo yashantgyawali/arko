@@ -69,21 +69,17 @@ export async function removeFromQueue(roomId: string, queueItemId: string) {
 }
 
 /**
- * Moves one of your own queued songs a place up or down.
+ * Sets the order of your own queued songs. `itemIds` has to be every one of
+ * them, which is what lets the server tell a real reorder from a stale list.
  *
- * It only ever swaps with another song of yours, so it changes which of your
- * songs fills which of your turns in the rotation — nobody else's place in
- * the line moves, and nobody can reorder their way to the front.
+ * It redeals your songs across the slots you already hold in the rotation, so
+ * nobody else's place in the line moves and nobody can reorder their way to
+ * the front.
  */
-export async function moveInQueue(
-  roomId: string,
-  queueItemId: string,
-  direction: "up" | "down",
-) {
-  const { error } = await supabase.rpc("move_queue_item", {
+export async function reorderMyQueue(roomId: string, itemIds: string[]) {
+  const { error } = await supabase.rpc("reorder_my_queue", {
     p_room_id: roomId,
-    p_queue_item_id: queueItemId,
-    p_direction: direction,
+    p_item_ids: itemIds,
   });
   if (error) throw error;
 }
