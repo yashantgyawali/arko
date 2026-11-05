@@ -36,7 +36,15 @@ async function youtubeSearch(query: string, apiKey: string): Promise<Track[]> {
   searchUrl.searchParams.set("part", "snippet");
   searchUrl.searchParams.set("q", query);
   searchUrl.searchParams.set("type", "video");
-  searchUrl.searchParams.set("videoCategoryId", "10");
+  // No videoCategoryId. Filtering to category 10 (Music) sounds right and
+  // quietly loses songs: whoever uploads decides the category, and plenty of
+  // independent releases land in 22 (People & Blogs) or 24 (Entertainment)
+  // instead. "Doja x Jungle ko bhoot" by FKNERAI is category 22 — with the
+  // filter it is absent from twenty results, without it it is the first.
+  // That failure is invisible from this side: the API returns a full page of
+  // plausible songs, just never the one being searched for. The scrape
+  // fallback has never filtered by category either, so searches were already
+  // finding different things depending on which path served them.
   searchUrl.searchParams.set("videoEmbeddable", "true");
   // fetch extra: some results get filtered out for length below, and we'd
   // rather still show a full page than a search that mysteriously thins out
@@ -85,8 +93,11 @@ async function lookupVideos(ids: string[], apiKey: string): Promise<Track[]> {
 
 /**
  * Fallback for when search.list is unavailable — this project's is capped
- * at 100 units/day (one call), and demo-catalog-only search has almost no
- * real coverage. This is not an official API: it fetches YouTube's own
+ * at 100 units/day (one call) when this was written, and demo-catalog-only
+ * search has almost no real coverage. That cap no longer seems to apply —
+ * several search.list calls in a row now succeed, which 100 units could not
+ * cover — but the fallback earns its place regardless: quota does run out,
+ * and the app has to work with no key at all. This is not an official API: it fetches YouTube's own
  * public /results page (the page a browser gets, not a metered endpoint)
  * and pulls video entries out of the `ytInitialData` blob embedded in the
  * HTML, the same technique several open-source YouTube-search libraries
